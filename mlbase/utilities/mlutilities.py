@@ -50,7 +50,7 @@ def topk(softmax, T, topks=(1,)):
 ######################################################################
 
 
-def regression_summary(T, Y, units='', plot=True, filename=None):
+def regression_summary(T, Y, units='', plot=True, xlabel=None, ylabel=None, filename=None):
     """Return and plot target vs predicted with r2 and rmse.
 
     !important: order of params matter.
@@ -76,8 +76,10 @@ def regression_summary(T, Y, units='', plot=True, filename=None):
 
         ax.set_title(f'$R^2$: {r2v:.3f}, RMSE: {rmsev:.3f} {units}',
                      loc='right', fontsize=12, fontstyle='italic')
-        ax.set_xlabel('Target Value', fontsize=default_font)
-        ax.set_ylabel('Predicted Value', fontsize=default_font)
+        ax.set_xlabel('Target Value' if xlabel is None else xlabel,
+                      fontsize=default_font)
+        ax.set_ylabel(
+            'Predicted Value' if xlabel is None else ylabel, fontsize=default_font)
         ax.tick_params(axis='x', labelsize=default_font)
         ax.tick_params(axis='y', labelsize=default_font)
 

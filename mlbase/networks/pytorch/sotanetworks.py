@@ -77,6 +77,8 @@ class NeuralNetwork():
                  weights=None, use_gpu=True, seed=None):
         super().__init__()
 
+        assert len(n_inputs) == 3, 'input shape must be (C, W, H).'
+
         if seed is not None:
             torch.manual_seed(seed)
         self.seed = seed
@@ -90,11 +92,12 @@ class NeuralNetwork():
 
         # Build nnet
         self.model_name = model_name.lower()
+        self.n_inputs = n_inputs
         self.n_outputs = n_outputs
         self._initialize_model(
-            self.model_name, self.n_outputs, feature_extract, weights)
+            self.model_name, self.n_inputs[0], self.n_outputs, feature_extract, weights)
         self.upsample = torch.nn.UpsamplingBilinear2d(
-            size=self.input_size) if n_inputs != self.input_size else None
+            size=self.input_size) if self.n_inputs[1] != self.input_size else None
 
         self.model.to(self.device)
         self.loss = None
@@ -136,7 +139,7 @@ class NeuralNetwork():
             for param in model.parameters():
                 param.requires_grad = False
 
-    def _initialize_model(self, model_name, n_outputs, feature_extract, weights):
+    def _initialize_model(self, model_name, input_channels, n_outputs, feature_extract, weights):
         """
         :param feature_extract: False, the model is finetuned and all model parameters are updated.
                                 True, only the last layer parameters are updated, the others remain fixed.
@@ -155,6 +158,9 @@ class NeuralNetwork():
             self._set_parameter_requires_grad(self.model, feature_extract)
             num_ftrs = self.model.fc.in_features
             self.model.fc = torch.nn.Linear(num_ftrs, n_outputs)
+
+            self.model.conv1 = torch.nn.Conv2d(input_channels, 64, kernel_size=(
+                7, 7), stride=(2, 2), padding=(3, 3), bias=False)
 
         elif 'squeezenet' in model_name:
             """ Squeezenet
@@ -478,39 +484,64 @@ class NeuralNetworkClassifier(NeuralNetwork):
 
     def __init__(self, *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
-        # TODO: only supporting CrossEntropyLoss as use function now computes softmax
-        # self.loss = torch.nn.NLLLoss()
         # CrossEntropyLoss computes LogSoftmax then NLLLoss
         self.classification = True
         self.loss = torch.nn.CrossEntropyLoss()
         self.model.to(self.device)
 
-    def use(self, X, all_output=False):
+    def use(self, X, all_output=False, probs=False):
         """
         Return:
             if all_output: predicted classes, all layers + softmax
             else: predicted classes
         """
-        # TODO: add batching to inference
         # turn off gradients and other aspects of training
+        def probf(l): return torch.sigmoid(
+            l) if l.shape[1] == 1 else F.softmax(l, dim=1)
+
+        def maxf(p): return np.where(
+            p > 0.5, 1, 0) if p.shape[1] == 1 else p.argmax(1)
+
         self.model.eval()
         try:
             with torch.no_grad():
                 if not isinstance(X, torch.Tensor):
                     X = torch.from_numpy(X).float()
-                X = self._standardizeX(self._upsample_tensor(X))
-                Ys = []
+                X = self._standardizeX(X)
+                if all_output:
+                    i = 0
+                    Ys = None
+                    nsamples = X.shape[0]
+                p = []
                 for x in self._make_batches(X):
                     x = x.to(self.device)
-                    Y = self.model(x)
-                    Ys.append(F.softmax(Y, dim=1).detach().cpu().numpy())
-                Ys = np.vstack(Ys)
+                    if all_output:
+                        end = x.shape[0] if x.shape[0] < nsamples else nsamples
+                        Y = self.model.forward_all_outputs(x)
+                        logits = Y[-1]
+                        Y = [y.detach().cpu().numpy() for y in Y]
+                        if Ys is None:
+                            Ys = [np.zeros((nsamples, *y.shape[1:]))
+                                  for y in Y]
+                        for j in range(len(Ys)):
+                            Ys[j][i:i+end] = Y[j]
+                        i += end
+                    else:
+                        logits = self.model(x)
+                    p.append(probf(logits).detach().cpu().numpy())
+                p = np.vstack(p)
         except RuntimeError:
             raise
         finally:
             torch.cuda.empty_cache()
-        Y = Ys.argmax(1).reshape(-1, 1)
-        return (Y, Ys) if all_output else Y
+        Y = maxf(p).reshape(-1, 1)
+
+        if all_output:
+            return (Y, Ys + [p])
+        elif probs:
+            return (Y, p)
+        else:
+            return Y
 
 
 if __name__ == '__main__':

@@ -161,7 +161,7 @@ class NeuralNetwork():
                     ni = n_units
                     l += 1
             self.model.add_module(
-                f'output_{l}', torch.nn.Linear(ni, n_outputs))
+                f'output', torch.nn.Linear(ni, n_outputs))
 
             # self.model.apply(self._init_weights)
 
@@ -403,10 +403,11 @@ class NeuralNetwork():
                     x).float(), [Xval, Tval]))
             Xval = self._standardizeX(Xval)
 
-        if self.loss is not None and self.classification:
-            Ttrain = Ttrain.flatten().type(torch.LongTensor)
-            if validation_data is not None:
-                Tval = Tval.flatten().type(torch.LongTensor)
+        if self.classification:
+            if isinstance(self.loss, torch.nn.CrossEntropyLoss):
+                Ttrain = Ttrain.flatten().type(torch.LongTensor)
+                if validation_data is not None:
+                    Tval = Tval.flatten().type(torch.LongTensor)
         else:  # standardize targets
             Ttrain = self._standardizeT(Ttrain)
             if validation_data is not None:
@@ -567,46 +568,72 @@ class NeuralNetworkClassifier(NeuralNetwork):
     class Network(NeuralNetwork.Network):
         def __init__(self, *args, **kwargs):
             super(self.__class__, self).__init__(*args, **kwargs)
-            # not needed if CrossEntropyLoss is used.
-            # self.model.add_module(f'log_softmax', torch.nn.LogSoftmax(dim=1))
 
     def __init__(self, *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
-        # TODO: only supporting CrossEntropyLoss as use function now computes softmax
-        # self.loss = torch.nn.NLLLoss()
-        # CrossEntropyLoss computes LogSoftmax then NLLLoss
         self.classification = True
-        self.loss = torch.nn.CrossEntropyLoss()
-        self.model.to(self.device)
+        if isinstance(self.model.n_outputs, int) and self.model.n_outputs == 2:
+            self.model.n_outputs = 1
+            ftrs = self.model.model.output.in_features
+            self.model.model.output = torch.nn.Linear(ftrs, 1, bias=True)
+            self.loss = torch.nn.BCEWithLogitsLoss()  # computes Sigmoid then BCELoss
+            self.model.to(self.device)
+        else:
+            self.loss = torch.nn.CrossEntropyLoss()  # computes LogSoftmax then NLLLoss
 
-    def use(self, X, all_output=False, detach=True):
+    def use(self, X, all_output=False, probs=False):
         """
         Return:
             if all_output: predicted classes, all layers + softmax
             else: predicted classes
         """
-        # TODO: add batching to inference
         # turn off gradients and other aspects of training
+        def probf(l): return torch.sigmoid(
+            l) if l.shape[1] == 1 else F.softmax(l, dim=1)
+
+        def maxf(p): return np.where(
+            p > 0.5, 1, 0) if p.shape[1] == 1 else p.argmax(1)
+
         self.model.eval()
         try:
             with torch.no_grad():
                 if not isinstance(X, torch.Tensor):
                     X = torch.from_numpy(X).float()
                 X = self._standardizeX(X)
-                X = X.to(self.device)
-                Ys = self.model.forward_all_outputs(X)
-
-                # probabilities
-                Ys.append(F.softmax(Ys[-1], dim=1))
-                if detach:
-                    X = X.detach().cpu().numpy()  # is this needed?
-                    Ys = [Y.detach().cpu().numpy() for Y in Ys]
+                if all_output:
+                    i = 0
+                    Ys = None
+                    nsamples = X.shape[0]
+                p = []
+                for x in self._make_batches(X):
+                    x = x.to(self.device)
+                    if all_output:
+                        end = x.shape[0] if x.shape[0] < nsamples else nsamples
+                        Y = self.model.forward_all_outputs(x)
+                        logits = Y[-1]
+                        Y = [y.detach().cpu().numpy() for y in Y]
+                        if Ys is None:
+                            Ys = [np.zeros((nsamples, *y.shape[1:]))
+                                  for y in Y]
+                        for j in range(len(Ys)):
+                            Ys[j][i:i+end] = Y[j]
+                        i += end
+                    else:
+                        logits = self.model(x)
+                    p.append(probf(logits).detach().cpu().numpy())
+                p = np.vstack(p)
         except RuntimeError:
             raise
         finally:
             torch.cuda.empty_cache()
-        Y = Ys[-1].argmax(1).reshape(-1, 1)
-        return (Y, Ys) if all_output else Y
+        Y = maxf(p).reshape(-1, 1)
+
+        if all_output:
+            return (Y, Ys + [p])
+        elif probs:
+            return (Y, p)
+        else:
+            return Y
 
 
 if __name__ == '__main__':
@@ -660,7 +687,33 @@ if __name__ == '__main__':
     plt.figure(2)
     plt.plot(nnet.train_error_trace)
 
-    print(f'{br}Testing NeuralNetwork for CNN classification{br}')
+    print(f'{br}Testing NeuralNetwork for CNN classification (BCE){br}')
+    #---------------------------------------------------------------#
+    X = np.zeros((100, 1, 10, 10))
+    T = np.zeros((100, 1))
+    for i in range(100):
+        col = i // 10
+        X[i, 0, :, 0: col + 1] = 1
+        # TODO: class must be between [0, num_classes-1]
+        T[i, 0] = 0 if col < 5 else 1
+
+    n_hiddens_list = [5]*2
+    conv_layers = [{'n_units': 3, 'shape': 3},
+                   {'n_units': 1, 'shape': [3, 3]}]
+
+    nnet = NeuralNetworkClassifier(X.shape[1:], n_hiddens_list, len(
+        np.unique(T)), conv_layers, use_gpu=True, seed=None)
+    nnet.summary()
+    print(nnet.loss)
+    nnet.train(X, T, validation_data=None,
+               n_epochs=50, batch_size=32, learning_rate=0.01, opt='adam',  # accsgd
+               ridge_penalty=0, verbose=True)
+    Y = nnet.use(X)
+    print(f'Accuracy: {accuracy(Y, T):.3f}')
+    plt.figure(3)
+    plt.plot(nnet.train_error_trace)
+
+    print(f'{br}Testing NeuralNetwork for CNN classification (NLL){br}')
     #---------------------------------------------------------------#
     X = np.zeros((100, 1, 10, 10))
     T = np.zeros((100, 1))
@@ -677,12 +730,13 @@ if __name__ == '__main__':
     nnet = NeuralNetworkClassifier(X.shape[1:], n_hiddens_list, len(
         np.unique(T)), conv_layers, use_gpu=True, seed=None)
     nnet.summary()
+    print(nnet.loss)
     nnet.train(X, T, validation_data=None,
                n_epochs=50, batch_size=32, learning_rate=0.01, opt='adam',  # accsgd
                ridge_penalty=0, verbose=True)
     Y = nnet.use(X)
     print(f'Accuracy: {accuracy(Y, T):.3f}')
-    plt.figure(3)
+    plt.figure(4)
     plt.plot(nnet.train_error_trace)
 
     plt.show(block=True)

@@ -17,7 +17,6 @@ def mnist(batch_size, img_size=(28, 28), root=None):
         .to_stream()
         .image_resize('image', h=img_size[0], w=img_size[1])
         .key_transform('image', normalize)
-        .batch(batch_size)
         .batch(len(train) if full_batch else batch_size)
     )
     if not full_batch:

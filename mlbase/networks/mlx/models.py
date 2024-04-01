@@ -287,7 +287,7 @@ class ViT(Base):
         cls_tokens = mx.repeat(self.cls_token, b, 0)
         x = mx.concatenate([cls_tokens, x], axis=1)
 
-        # x = x + self.pos_embedding
+        x = x + self.pos_embedding
         x = self.dropout(x)
 
         x = self.transformer(x)

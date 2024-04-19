@@ -149,6 +149,7 @@ class SCG(Optimizer):
                 'delta': 0,
             }
             first = True
+            print(self._get_weights(), gw, fw, p, p2)
 
         lamb = self.state['lamb']
         lamb_h = self.state['lamb_h']
@@ -172,7 +173,7 @@ class SCG(Optimizer):
 
         # 2) calculate second order info
         if success:
-            sigma = sigma0 / math.sqrt(p2) # + ( ... np.finfo(float).eps)
+            sigma = sigma0 / math.sqrt(p2)  # + ( ... np.finfo(float).eps)
 
             g_small_step = self._gradient_temp_w(w + sigma * p)
 
@@ -274,6 +275,7 @@ if __name__ == '__main__':
 
         def run_optimization(xy_init, optimizer_class, n_iter, **optimizer_kwargs):
             xy_t = torch.tensor(xy_init, requires_grad=True)
+            print(xy_t.dtype)
             optimizer = optimizer_class([xy_t], **optimizer_kwargs)
 
             path = np.empty((n_iter + 1, 2))
@@ -354,35 +356,35 @@ if __name__ == '__main__':
         xy_init = (.3, .8)
         n_iter = 200
 
-        path_adam = run_optimization(xy_init, Adam, n_iter, lr=0.01)
-        path_sgd = run_optimization(xy_init, SGD, n_iter, lr=0.01)
+        # path_adam = run_optimization(xy_init, Adam, n_iter, lr=0.01)
+        # path_sgd = run_optimization(xy_init, SGD, n_iter, lr=0.01)
         path_scg = run_optimization(xy_init, SCG, n_iter)
 
-        freq = 1
+        # freq = 1
 
-        paths = [path_adam[::freq], path_sgd[::freq], path_scg[::freq]]
-        colors = ["green", "blue", "black"]
-        names = ["Adam", "SGD", "SCG"]
+        # paths = [path_adam[::freq], path_sgd[::freq], path_scg[::freq]]
+        # colors = ["green", "blue", "black"]
+        # names = ["Adam", "SGD", "SCG"]
 
-        anim = create_animation(paths,
-                                colors,
-                                names,
-                                figsize=(12, 7),
-                                x_lim=(-.1, 1.1),
-                                y_lim=(-.1, 1.1),
-                                n_seconds=7)
+        # anim = create_animation(paths,
+        #                         colors,
+        #                         names,
+        #                         figsize=(12, 7),
+        #                         x_lim=(-.1, 1.1),
+        #                         y_lim=(-.1, 1.1),
+        #                         n_seconds=7)
 
-        print('sgd')
-        print(path_sgd[-15:])
-        print('adam')
-        print(path_adam[-15:])
-        print('scg')
-        print(path_scg[-15:])
+        # print('sgd')
+        # print(path_sgd[-15:])
+        # print('adam')
+        # print(path_adam[-15:])
+        # print('scg')
+        # print(path_scg[-15:])
 
-        print('Creating animation ...')
-        anim.save("result.gif")
+        # print('Creating animation ...')
+        # anim.save("result.gif")
 
-        print('Resulting animation is in result.gif')
+        # print('Resulting animation is in result.gif')
 
     ######################################################################
     if test_mnist:

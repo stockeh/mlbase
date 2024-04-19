@@ -1,6 +1,5 @@
 import numpy as np
 import sys
-import copy
 import time
 import math  # for math.ceil
 
@@ -151,7 +150,6 @@ def scg(w, error_f, fargs=[], n_iterations=100, error_gradient_f=None,
     iteration = 1     # count of number of iterations
 
     thisIteration = 1
-
     while thisIteration <= n_iterations:
 
         if success:
@@ -255,6 +253,26 @@ def scg(w, error_f, fargs=[], n_iterations=100, error_gradient_f=None,
 
         # If we get here, then we haven't terminated in the given number of iterations.
 
+        # a = {
+        #     "beta": beta,
+        #     "d": d,
+        #     "error_now": error_now,
+        #     "error_old": error_old,
+        #     "ftrace": ftrace,
+        #     "gradnew": gradnew,
+        #     "gradold": gradold,
+        #     "kappa": kappa,
+        #     "mu": mu,
+        #     "nsuccess": nsuccess,
+        #     "nvars": nvars,
+        #     "step": iteration,
+        #     "success": success,
+        #     "theta": theta,
+        #     "w": w
+        # }
+        # import json
+        # print(json.dumps(a, sort_keys=True, indent=2, default=str))
+
     return {'w': w,
             'f': error_now,
             'n_iterations': iteration,
@@ -272,7 +290,7 @@ if __name__ == '__main__':
     def error_grad(w):
         return 2 * (w - 1.5)
 
-    w = np.array([-5.5])
+    w = np.array([-5.5], dtype=np.float32)
 
     result = sgd(w, error, [], 1000, error_grad,
                  learning_rate=0.1, momentum_rate=0.5)
@@ -282,4 +300,26 @@ if __name__ == '__main__':
     print(f"adam w is {result['w'][0]:.3f}")
 
     result = scg(w, error, [], 1000, error_grad)
-    print(f"scg w is {result['w'][0]:.3f}")
+    print(f"scg w is {result['w'][0]:.3f}",
+          result['n_iterations'], result['reason'])
+
+    print('----Rosenbrock----')
+    import mlx.core as mx
+
+    def error(xy):
+        x, y = xy
+        return (1 - x) ** 2 + 100 * (y - x ** 2) ** 2
+
+    def error_grad(xy):
+        return np.array(mx.grad(error)(mx.array(xy)))
+
+    w = np.array([.3, .8], dtype=np.float32)
+
+    result = sgd(w, error, [], 1000, error_grad, learning_rate=0.001)
+    print(f"sgd w is {result['w']}")
+
+    result = adam(w, error, [], 1000, error_grad, learning_rate=0.001)
+    print(f"adam w is {result['w']}")
+
+    result = scg(w, error, [], 1000, error_grad)
+    print(f"scg w is {result['w']}", result['n_iterations'], result['reason'])

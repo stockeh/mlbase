@@ -265,7 +265,10 @@ def rosenbrock():
         ax.plot(*minimum, 'kD')
         ax.set_title(
             'Rosenbrok Function: $f(x, y) = (1 - x)^2 + 100(y - x^2)^2$')
-        fig.savefig(f'media/rosenbrock.png', dpi=300, bbox_inches='tight')
+
+        fig.tight_layout()
+        # fig.savefig(f'media/rosenbrock.png', dpi=300, bbox_inches='tight')
+        plt.show()
 
     xy_init = (-2, 2)
     n_iter = 750

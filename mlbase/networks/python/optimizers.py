@@ -140,14 +140,14 @@ def scg(w, error_f, fargs=[], n_iterations=100, error_gradient_f=None,
     ftrace = [eval_f(error_old)]
 
     gradold = gradnew
-    d = -gradnew      # Initial search direction.
-    success = True    # Force calculation of directional derivs.
-    nsuccess = 0      # nsuccess counts number of successes.
-    beta = 1.0e-6     # Initial scale parameter. Lambda in Moeller.
+    d = -gradnew       # Initial search direction.
+    success = True     # Force calculation of directional derivs.
+    nsuccess = 0       # nsuccess counts number of successes.
+    beta = 1.0e-6      # Initial scale parameter. Lambda in Moeller.
     betamin = 1.0e-15  # Lower bound on scale.
-    betamax = 1.0e20  # Upper bound on scale.
+    betamax = 1.0e20   # Upper bound on scale.
     nvars = len(w)
-    iteration = 1     # count of number of iterations
+    iteration = 1      # count of number of iterations
 
     thisIteration = 1
     while thisIteration <= n_iterations:
@@ -306,20 +306,63 @@ if __name__ == '__main__':
     print('----Rosenbrock----')
     import mlx.core as mx
 
-    def error(xy):
+    def rosenbrock(xy):
         x, y = xy
         return (1 - x) ** 2 + 100 * (y - x ** 2) ** 2
 
-    def error_grad(xy):
-        return np.array(mx.grad(error)(mx.array(xy)))
+    def rosenbrock_grad(xy):
+        return np.array(mx.grad(rosenbrock)(mx.array(xy)))
 
-    w = np.array([.3, .8], dtype=np.float32)
+    w = np.array([-2, 2], dtype=np.float32)
 
-    result = sgd(w, error, [], 1000, error_grad, learning_rate=0.001)
+    steps = 1000
+    result = sgd(w, rosenbrock, [], steps, rosenbrock_grad,
+                 learning_rate=0.001, save_wtrace=True)
     print(f"sgd w is {result['w']}")
+    path_sgd = result['wtrace']
 
-    result = adam(w, error, [], 1000, error_grad, learning_rate=0.001)
+    result = adam(w, rosenbrock, [], steps, rosenbrock_grad,
+                  learning_rate=0.05, save_wtrace=True)
     print(f"adam w is {result['w']}")
+    path_adam = result['wtrace']
 
-    result = scg(w, error, [], 1000, error_grad)
+    result = scg(w, rosenbrock, [], steps, rosenbrock_grad, save_wtrace=True)
     print(f"scg w is {result['w']}", result['n_iterations'], result['reason'])
+    path_scg = result['wtrace']
+
+    import matplotlib.pyplot as plt
+
+    def plot_rosenbrok(paths, names, colors):
+        assert len(paths) == len(names) == len(colors), ValueError
+        n = 300
+        x = mx.linspace(-2.5, 1.5, n)
+        y = mx.linspace(-1.5, 3.5, n)
+        minimum = (1.0, 1.0)
+
+        X, Y = mx.meshgrid(x, y)
+        Z = rosenbrock([X, Y])
+
+        fig = plt.figure(figsize=(8, 5))
+
+        ax = fig.add_subplot(1, 1, 1)
+        ax.contour(X, Y, Z, levels=40, cmap='inferno')
+        ax.contourf(X, Y, Z, levels=40, cmap='binary', alpha=0.7)
+
+        for path, name, color in zip(paths, names, colors):
+            iter_x, iter_y = path[:, 0], path[:, 1]
+            ax.plot(iter_x, iter_y, marker='x', ms=3,
+                    lw=2, label=name, color=color)
+        ax.legend(fontsize=12)
+        ax.axis('off')
+        ax.plot(*minimum, 'kD')
+        ax.set_title(
+            'Rosenbrok Function: $f(x, y) = (1 - x)^2 + 100(y - x^2)^2$')
+        fig.tight_layout()
+        plt.show()
+
+    freq = 1
+    paths = [path_adam[::freq], path_sgd[::freq], path_scg[::freq]]
+    names = ['Adam', 'SGD', 'SCG']
+    colors = ['royalblue', 'seagreen', 'red']
+    print('saving results to rosenbrock.png')
+    plot_rosenbrok(paths, names, colors)

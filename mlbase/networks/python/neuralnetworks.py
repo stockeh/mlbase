@@ -67,10 +67,12 @@ class NeuralNetwork:
         self.training_time = None
 
     def __repr__(self):
-        str = f'{type(self).__name__}({self.n_inputs}, {self.n_hiddens_list}, {self.n_outputs})'
+        str = f'{type(self).__name__}({self.n_inputs}, {
+            self.n_hiddens_list}, {self.n_outputs})'
         if self.trained:
             str += f'\n   Network was trained for {self.n_epochs} epochs'
-            str += f' that took {self.training_time:.4f} seconds. Final objective value is {self.error_trace[-1]:.3f}'
+            str += f' that took {self.training_time:.4f} seconds. Final objective value is {
+                self.error_trace[-1]:.3f}'
         else:
             str += '  Network is not trained.'
         return str
@@ -218,39 +220,47 @@ if __name__ == '__main__':
     plt.ion()
 
     np.random.seed(42)
-    print('Called np.random.seed(42)')
 
-    X = np.arange(10).reshape((-1, 1))
-    T = X ** 2
-    n_epochs = 200
+    n = 500
+    X = np.linspace(0, 2 * np.pi, n).reshape((-1, 1))
+    T = np.sin(X) + 0.1 * np.random.randn(*X.shape)
+    n_epochs = 2000
 
-    nnet = NeuralNetwork(1, [], 1)
+    nnet = NeuralNetwork(X.shape[1], [], T.shape[1])
     nnet.train(X, T, n_epochs)
     Y = nnet.use(X)
     print(
         f'scg  {nnet.n_hiddens_list} RMSE {ml.rmse(Y, T):.3f} took {nnet.training_time:.3f} seconds')
 
-    nnet = NeuralNetwork(1, [5, 5], 1)
+    plt.figure(1, figsize=(5, 4))
+
+    nnet = NeuralNetwork(X.shape[1], [5]*2, T.shape[1])
     nnet.train(X, T, n_epochs)
     Y = nnet.use(X)
     print(
         f'scg  {nnet.n_hiddens_list} RMSE {ml.rmse(Y, T):.3f} took {nnet.training_time:.3f} seconds')
 
-    nnet = NeuralNetwork(1, [5, 5], 1)
+    plt.plot(nnet.error_trace, lw=2, label='scg')
+
+    nnet = NeuralNetwork(X.shape[1], [5]*2, T.shape[1])
     nnet.train(X, T, n_epochs, method='sgd',
-               learning_rate=0.5, momentum_rate=0.5)
+               learning_rate=0.01, momentum_rate=0.5)
     Y = nnet.use(X)
     print(
         f'sgd  {nnet.n_hiddens_list} RMSE {ml.rmse(Y, T):.3f} took {nnet.training_time:.3f} seconds')
 
-    nnet = NeuralNetwork(1, [5, 5], 1)
-    nnet.train(X, T, n_epochs, method='adam', learning_rate=0.1)
+    plt.plot(nnet.error_trace, lw=2, label='sgd')
+
+    nnet = NeuralNetwork(X.shape[1], [5]*2, T.shape[1])
+    nnet.train(X, T, n_epochs, method='adam', learning_rate=0.001)
     Y = nnet.use(X)
     print(
         f'adam {nnet.n_hiddens_list} RMSE {ml.rmse(Y, T):.3f} took {nnet.training_time:.3f} seconds')
 
-    plt.figure(1)
-    plt.plot(nnet.error_trace)
+    plt.plot(nnet.error_trace, lw=2, label='adam')
+    plt.legend()
+    plt.xlabel('Epochs')
+    plt.ylabel('RMSE')
 
     plt.figure(2)
     nnet.draw()

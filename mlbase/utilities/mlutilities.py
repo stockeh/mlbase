@@ -359,7 +359,7 @@ def draw(Vs, W, inputNames=None, outputNames=None, gray=False):
             ys = np.array([y0+ni+0.5]*no)
             for x, y in zip(xs, ys):
                 patches.append(pltpatch.RegularPolygon(
-                    (x, y-0.4), 3, 0.3, 0, color='#555555'))
+                    (x, y-0.4), 3, radius=0.3, orientation=0, color='#555555'))
             # weights
             if gray:
                 colors = np.array(["black", "gray"])[(thisW.flat >= 0)+0]
@@ -389,7 +389,7 @@ def draw(Vs, W, inputNames=None, outputNames=None, gray=False):
             ys = y0 + 0.5 + np.arange(no)
             for x, y in zip(xs, ys):
                 patches.append(pltpatch.RegularPolygon(
-                    (x-0.4, y), 3, 0.3, -np.pi/2, color='#555555'))
+                    (x-0.4, y), 3, radius=0.3, orientation=-np.pi/2, color='#555555'))
             # weights
             if gray:
                 colors = np.array(["black", "gray"])[(thisW.flat >= 0)+0]

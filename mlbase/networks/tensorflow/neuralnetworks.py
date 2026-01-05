@@ -4,6 +4,7 @@ import numpy as np
 import random
 import time
 import copy
+from numbers import Integral
 
 
 class TrainLogger(tf.keras.callbacks.Callback):
@@ -43,7 +44,8 @@ class NeuralNetwork():
         """Initialize the model according to arguments
 
         :param n_inputs: a shape tuple (integers), not including the 
-            batch size. e.g. (128,128,1) or (32,)
+            batch size. e.g. (128,128,1) or (32,). A plain integer is
+            also accepted and is treated as a one-dimensional shape.
         :param n_hiddens_list: list (integers) specifying the number of 
             hidden units. e.g. [10, 10] two layers with 10 units each or
             [0] to have no hidden layers
@@ -66,12 +68,12 @@ class NeuralNetwork():
         self._set_seed()
         tf.keras.backend.clear_session()
 
-        self.n_inputs = n_inputs
+        self.n_inputs = self._normalize_shape(n_inputs, 'n_inputs')
         self.conv_layers = conv_layers
         self.n_hiddens_list = n_hiddens_list
         self.n_outputs = n_outputs
 
-        X = Z = tf.keras.Input(shape=n_inputs)
+        X = Z = tf.keras.Input(shape=self.n_inputs)
 
         # -----------------------
         # convolutional layers
@@ -241,6 +243,43 @@ class NeuralNetwork():
         Y = self._unstandardizeT(self.model.predict(self._standardizeX(X),
                                                     batch_size=self.batch_size))
         return Y
+
+    @staticmethod
+    def _normalize_shape(shape, name):
+        """Ensure Keras receives a tuple shape even if caller passes an int."""
+        if isinstance(shape, Integral):
+            if shape <= 0:
+                raise ValueError(f"{name} must be a positive integer.")
+            return (int(shape),)
+
+        try:
+            normalized = tuple(
+                NeuralNetwork._normalize_dim(dim, name) for dim in shape
+            )
+        except TypeError as exc:
+            raise ValueError(
+                f"{name} must be an int or iterable of ints (optionally None)."
+            ) from exc
+
+        if len(normalized) == 0:
+            raise ValueError(f"{name} must describe at least one dimension.")
+
+        return normalized
+
+    @staticmethod
+    def _normalize_dim(dim, name):
+        if dim is None:
+            return None
+        if isinstance(dim, Integral):
+            dim = int(dim)
+            if dim <= 0:
+                raise ValueError(
+                    f"{name} dimensions must be positive; got {dim}."
+                )
+            return dim
+        raise ValueError(
+            f"{name} dimensions must be integers or None; got {dim}."
+        )
 
 
 if __name__ == '__main__':

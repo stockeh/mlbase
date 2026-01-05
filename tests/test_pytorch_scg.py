@@ -1,14 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-
 from matplotlib.animation import FuncAnimation
-from torch.optim import Adam, SGD
+from torch.optim import SGD, Adam
 from tqdm import tqdm
 
 from mlbase.networks.pytorch.optimizers.scg_optim_pytorch import SCG
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     test_rosenbrock = True
 
@@ -18,7 +17,7 @@ if __name__ == '__main__':
         # https://github.com/jankrepl/mildlyoverfitted
         def rosenbrock(xy):
             x, y = xy
-            return (1 - x) ** 2 + 100 * (y - x ** 2) ** 2
+            return (1 - x) ** 2 + 100 * (y - x**2) ** 2
 
         def run_optimization(xy_init, optimizer_class, n_iter, **optimizer_kwargs):
             xy_t = torch.tensor(xy_init, requires_grad=True)
@@ -28,7 +27,7 @@ if __name__ == '__main__':
             path[0, :] = xy_init
 
             def closure(grad=True, loss=None):
-                '''Only for SCG'''
+                """Only for SCG"""
                 if not loss:
                     loss = rosenbrock(xy_t)
                 if not grad:
@@ -53,13 +52,15 @@ if __name__ == '__main__':
 
             return path
 
-        def create_animation(paths,
-                             colors,
-                             names,
-                             figsize=(12, 12),
-                             x_lim=(-2, 2),
-                             y_lim=(-1, 3),
-                             n_seconds=5):
+        def create_animation(
+            paths,
+            colors,
+            names,
+            figsize=(12, 12),
+            x_lim=(-2, 2),
+            y_lim=(-1, 3),
+            n_seconds=5,
+        ):
             if not (len(paths) == len(colors) == len(names)):
                 raise ValueError
 
@@ -74,31 +75,33 @@ if __name__ == '__main__':
             minimum = (1.0, 1.0)
 
             fig, ax = plt.subplots(figsize=figsize)
-            ax.contour(X, Y, Z, 90, cmap='jet')
+            ax.contour(X, Y, Z, 90, cmap="jet")
 
-            lines = [ax.plot([], [], '.-',
-                             label=label,
-                             c=c) for c, label in zip(colors, names)]
+            lines = [
+                ax.plot([], [], ".-", label=label, c=c)
+                for c, label in zip(colors, names)
+            ]
 
-            ax.legend(prop={'size': 25})
-            ax.plot(*minimum, 'rD')
+            ax.legend(prop={"size": 25})
+            ax.plot(*minimum, "rD")
 
             def animate(i):
                 for path, line in zip(paths, lines):
                     # set_offsets(path[:i, :])
-                    line[0].set_xdata(path[:i+1, 0])
+                    line[0].set_xdata(path[: i + 1, 0])
                     # set_offsets(path[:i, :])
-                    line[0].set_ydata(path[:i+1, 1])
+                    line[0].set_ydata(path[: i + 1, 1])
 
                 ax.set_title(str(i))
 
             ms_per_frame = 1000 * n_seconds / path_length
 
             anim = FuncAnimation(
-                fig, animate, frames=path_length, interval=ms_per_frame)
+                fig, animate, frames=path_length, interval=ms_per_frame
+            )
             return anim
 
-        xy_init = (.3, .8)
+        xy_init = (0.3, 0.8)
         n_iter = 200
 
         path_adam = run_optimization(xy_init, Adam, n_iter, lr=0.01)
@@ -108,26 +111,28 @@ if __name__ == '__main__':
         freq = 1
 
         paths = [path_adam[::freq], path_sgd[::freq], path_scg[::freq]]
-        colors = ['green', 'blue', 'black']
-        names = ['Adam', 'SGD', 'SCG']
+        colors = ["green", "blue", "black"]
+        names = ["Adam", "SGD", "SCG"]
 
-        anim = create_animation(paths,
-                                colors,
-                                names,
-                                figsize=(12, 7),
-                                x_lim=(-.1, 1.1),
-                                y_lim=(-.1, 1.1),
-                                n_seconds=7)
+        anim = create_animation(
+            paths,
+            colors,
+            names,
+            figsize=(12, 7),
+            x_lim=(-0.1, 1.1),
+            y_lim=(-0.1, 1.1),
+            n_seconds=7,
+        )
 
-        print('sgd')
+        print("sgd")
         print(path_sgd[-15:])
-        print('adam')
+        print("adam")
         print(path_adam[-15:])
-        print('scg')
+        print("scg")
         print(path_scg[-15:])
 
-        print('Creating animation ...')
-        fname = 'media/result_scg.gif'
+        print("Creating animation ...")
+        fname = "media/result_scg.gif"
         anim.save(fname)
 
-        print(f'Resulting animation is in {fname}')
+        print(f"Resulting animation is in {fname}")

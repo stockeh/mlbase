@@ -1,10 +1,11 @@
-import numpy as np
 import sys  # for sys.float_info.epsilon
 
+import numpy as np
 
 ######################################################################
 # class QDA
 ######################################################################
+
 
 class QDA(object):
 
@@ -48,43 +49,53 @@ class QDA(object):
         self.discriminant_constant = []
         for ki in range(len(self.classes)):
             self.discriminant_constant.append(
-                np.log(self.prior[ki]) - 0.5*np.log(self.determinant[ki]))
+                np.log(self.prior[ki]) - 0.5 * np.log(self.determinant[ki])
+            )
 
     def use(self, X, all_outputs=False):
         Xs = (X - self.means) / self.stds
         discriminants, probabilities = self._discriminant_function(Xs)
         predicted_class = self.classes[np.argmax(discriminants, axis=1)]
         predicted_class = predicted_class.reshape((-1, 1))
-        return (predicted_class, probabilities, discriminants) if all_outputs else predicted_class
+        return (
+            (predicted_class, probabilities, discriminants)
+            if all_outputs
+            else predicted_class
+        )
 
     def _discriminant_function(self, Xs):
         nSamples = Xs.shape[0]
         discriminants = np.zeros((nSamples, len(self.classes)))
         for ki in range(len(self.classes)):
             Xc = Xs - self.mu[ki].T
-            discriminants[:, ki:ki+1] = self.discriminant_constant[ki] - 0.5 * \
-                np.sum(np.dot(Xc, self.sigma_inv[ki])
-                       * Xc, axis=1).reshape((-1, 1))
+            discriminants[:, ki : ki + 1] = self.discriminant_constant[
+                ki
+            ] - 0.5 * np.sum(np.dot(Xc, self.sigma_inv[ki]) * Xc, axis=1).reshape(
+                (-1, 1)
+            )
         D = Xs.shape[1]
-        probabilities = np.exp(discriminants - 0.5*D*np.log(2*np.pi))
+        probabilities = np.exp(discriminants - 0.5 * D * np.log(2 * np.pi))
         return discriminants, probabilities
 
     def __repr__(self):
         if self.mu is None:
-            return 'QDA not trained.'
+            return "QDA not trained."
         else:
-            return 'QDA trained for classes {}'.format(self.classes)
+            return "QDA trained for classes {}".format(self.classes)
 
 
 ######################################################################
 # class LDA
 ######################################################################
 
+
 class LDA(QDA):
 
     def _finish_train(self):
         self.sigma_mean = np.sum(
-            np.stack(self.sigma) * np.array(self.prior)[:, np.newaxis, np.newaxis], axis=0)
+            np.stack(self.sigma) * np.array(self.prior)[:, np.newaxis, np.newaxis],
+            axis=0,
+        )
         self.sigma_mean_inv = np.linalg.pinv(self.sigma_mean)
         # print(self.sigma)
         # print(self.sigma_mean)
@@ -92,19 +103,24 @@ class LDA(QDA):
         self.discriminant_coefficient = []
         for ki in range(len(self.classes)):
             sigma_mu = np.dot(self.sigma_mean_inv, self.mu[ki])
-            self.discriminant_constant.append(-0.5 *
-                                              np.dot(self.mu[ki].T, sigma_mu))
+            self.discriminant_constant.append(-0.5 * np.dot(self.mu[ki].T, sigma_mu))
             self.discriminant_coefficient.append(sigma_mu)
 
     def _discriminant_function(self, Xs):
         nSamples = Xs.shape[0]
         discriminants = np.zeros((nSamples, len(self.classes)))
         for ki in range(len(self.classes)):
-            discriminants[:, ki:ki+1] = self.discriminant_constant[ki] + \
-                np.dot(Xs, self.discriminant_coefficient[ki])
+            discriminants[:, ki : ki + 1] = self.discriminant_constant[ki] + np.dot(
+                Xs, self.discriminant_coefficient[ki]
+            )
         D = Xs.shape[1]
-        probabilities = np.exp(discriminants - 0.5*D*np.log(2*np.pi) - 0.5*np.log(self.determinant[ki])
-                               - 0.5*np.sum(np.dot(Xs, self.sigma_mean_inv) * Xs, axis=1).reshape((-1, 1)))
+        probabilities = np.exp(
+            discriminants
+            - 0.5 * D * np.log(2 * np.pi)
+            - 0.5 * np.log(self.determinant[ki])
+            - 0.5
+            * np.sum(np.dot(Xs, self.sigma_mean_inv) * Xs, axis=1).reshape((-1, 1))
+        )
         return discriminants, probabilities
 
 
@@ -112,27 +128,29 @@ class LDA(QDA):
 # Example use
 ######################################################################
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     D = 5  # number of components in each sample
     N = 20  # number of samples in each class
-    X = np.vstack((np.random.normal(0.0, 1.0, (N, D)),
-                   np.random.normal(4.0, 1.5, (N, D))))
-    T = np.vstack((np.array([1]*N).reshape((N, 1)),
-                   np.array([2]*N).reshape((N, 1))))
+    X = np.vstack(
+        (np.random.normal(0.0, 1.0, (N, D)), np.random.normal(4.0, 1.5, (N, D)))
+    )
+    T = np.vstack(
+        (np.array([1] * N).reshape((N, 1)), np.array([2] * N).reshape((N, 1)))
+    )
 
     qda = QDA()
     qda.train(X, T)
     c, prob, _ = qda.use(X, all_outputs=True)
-    print('QDA', np.sum(c == T)/X.shape[0] * 100, '% correct')
-    print('{:>3s} {:>4s} {:>14s}'.format('T', 'Pred', 'prob(C=k|x)'))
+    print("QDA", np.sum(c == T) / X.shape[0] * 100, "% correct")
+    print("{:>3s} {:>4s} {:>14s}".format("T", "Pred", "prob(C=k|x)"))
     for row in np.hstack((T, c, prob)):
-        print('{:3.0f} {:3.0f} {:8.4f} {:8.4f}'.format(*row))
+        print("{:3.0f} {:3.0f} {:8.4f} {:8.4f}".format(*row))
 
     lda = LDA()
     lda.train(X, T)
     c, prob, d = lda.use(X, all_outputs=True)
-    print('LDA', np.sum(c == T)/X.shape[0] * 100, '% correct')
-    print('{:>3s} {:>4s} {:>14s}'.format('T', 'Pred', 'prob(C=k|x)'))
+    print("LDA", np.sum(c == T) / X.shape[0] * 100, "% correct")
+    print("{:>3s} {:>4s} {:>14s}".format("T", "Pred", "prob(C=k|x)"))
     for row in np.hstack((T, c, prob)):
-        print('{:3.0f} {:3.0f} {:8.4f} {:8.4f}'.format(*row))
+        print("{:3.0f} {:3.0f} {:8.4f} {:8.4f}".format(*row))

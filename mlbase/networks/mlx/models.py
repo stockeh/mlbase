@@ -1,9 +1,9 @@
 import importlib
-import mlx.nn as nn
-import mlx.core as mx
+from typing import List, Optional, Tuple, Type, Union
 
+import mlx.core as mx
+import mlx.nn as nn
 from mlx.utils import tree_flatten, tree_map
-from typing import List, Type, Tuple, Union, Optional
 
 
 def pair(t):
@@ -11,12 +11,15 @@ def pair(t):
 
 
 def get_activation(activation_f: str) -> Type:
-    package_name = 'mlx.nn.layers.activations'
+    package_name = "mlx.nn.layers.activations"
     module = importlib.import_module(package_name)
 
     activations = [getattr(module, attr) for attr in dir(module)]
-    activations = [cls for cls in activations if isinstance(
-        cls, type) and issubclass(cls, nn.Module)]
+    activations = [
+        cls
+        for cls in activations
+        if isinstance(cls, type) and issubclass(cls, nn.Module)
+    ]
     names = [cls.__name__.lower() for cls in activations]
 
     try:
@@ -24,10 +27,16 @@ def get_activation(activation_f: str) -> Type:
         return activations[index]
     except ValueError:
         raise NotImplementedError(
-            f'get_activation: {activation_f=} is not yet implemented.')
+            f"get_activation: {activation_f=} is not yet implemented."
+        )
 
 
-def compute_padding(input_size: tuple, kernel_size: int | tuple, stride: int | tuple = 1, dilation: int | tuple = 1):
+def compute_padding(
+    input_size: tuple,
+    kernel_size: int | tuple,
+    stride: int | tuple = 1,
+    dilation: int | tuple = 1,
+):
     if len(input_size) == 2:
         input_size = (*input_size, 1)
     if isinstance(kernel_size, int):
@@ -72,15 +81,20 @@ class Base(nn.Module):
 
     def summary(self):
         print(self)
-        print(f'Number of parameters: {self.num_params}')
+        print(f"Number of parameters: {self.num_params}")
 
     def __call__(self, x: mx.array) -> mx.array:
-        raise NotImplementedError('Subclass must implement this method')
+        raise NotImplementedError("Subclass must implement this method")
 
 
 class MLP(Base):
-    def __init__(self, n_inputs: int, n_hiddens_list: Union[List, int],
-                 n_outputs: int, activation_f: str = 'tanh'):
+    def __init__(
+        self,
+        n_inputs: int,
+        n_hiddens_list: Union[List, int],
+        n_outputs: int,
+        activation_f: str = "tanh",
+    ):
         super().__init__()
 
         if isinstance(n_hiddens_list, int):
@@ -110,13 +124,14 @@ class MLP(Base):
 
 
 class Network(Base):
-    def __init__(self,
-                 n_inputs: Union[List[int], Tuple[int], mx.array],
-                 n_outputs: int,
-                 conv_layers_list: Optional[List[dict]] = None,
-                 n_hiddens_list: Optional[Union[List, int]] = 0,
-                 activation_f: str = 'relu'
-                 ):
+    def __init__(
+        self,
+        n_inputs: Union[List[int], Tuple[int], mx.array],
+        n_outputs: int,
+        conv_layers_list: Optional[List[dict]] = None,
+        n_hiddens_list: Optional[Union[List, int]] = 0,
+        activation_f: str = "relu",
+    ):
         super().__init__()
 
         if isinstance(n_hiddens_list, int):
@@ -135,19 +150,32 @@ class Network(Base):
             for conv_layer in conv_layers_list:
                 n_channels = ni[-1].item()
 
-                padding = conv_layer.get('padding', compute_padding(  # same padding
-                    ni, conv_layer['kernel_size'], conv_layer.get('stride', 1), conv_layer.get('dilation', 1)))
-
-                self.conv.extend([
-                    nn.Conv2d(n_channels, conv_layer['filters'], conv_layer['kernel_size'],
-                              stride=conv_layer.get('stride', 1), padding=padding,
-                              dilation=conv_layer.get('dilation', 1), bias=conv_layer.get('bias', True)),
-                    activation(),
-                    nn.MaxPool2d(2, stride=2)
-                ])
-                ni = mx.concatenate(
-                    [ni[:-1] // 2, mx.array([conv_layer['filters']])]
+                padding = conv_layer.get(
+                    "padding",
+                    compute_padding(  # same padding
+                        ni,
+                        conv_layer["kernel_size"],
+                        conv_layer.get("stride", 1),
+                        conv_layer.get("dilation", 1),
+                    ),
                 )
+
+                self.conv.extend(
+                    [
+                        nn.Conv2d(
+                            n_channels,
+                            conv_layer["filters"],
+                            conv_layer["kernel_size"],
+                            stride=conv_layer.get("stride", 1),
+                            padding=padding,
+                            dilation=conv_layer.get("dilation", 1),
+                            bias=conv_layer.get("bias", True),
+                        ),
+                        activation(),
+                        nn.MaxPool2d(2, stride=2),
+                    ]
+                )
+                ni = mx.concatenate([ni[:-1] // 2, mx.array([conv_layer["filters"]])])
 
         ni = mx.prod(ni).item()
         self.fcn = []
@@ -168,7 +196,7 @@ class Network(Base):
 
 
 class FeedForward(nn.Module):
-    def __init__(self, dim, hidden_dim, dropout=0.):
+    def __init__(self, dim, hidden_dim, dropout=0.0):
         super().__init__()
         self.norm = nn.RMSNorm(dim)
         self.dropout = nn.Dropout(dropout)
@@ -182,13 +210,13 @@ class FeedForward(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
+    def __init__(self, dim, heads=8, dim_head=64, dropout=0.0):
         super().__init__()
         inner_dim = dim_head * heads
         project_out = not (heads == 1 and dim_head == dim)
 
         self.heads = heads
-        self.scale = dim_head ** -0.5
+        self.scale = dim_head**-0.5
 
         self.norm = nn.RMSNorm(dim)
         self.dropout = nn.Dropout(dropout)
@@ -199,18 +227,18 @@ class Attention(nn.Module):
         self.wo = nn.Linear(inner_dim, dim, bias=False)
         self.rope = nn.RoPE(dim_head, traditional=True, base=1e4)
 
-        self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, dim),
-            nn.Dropout(dropout)
-        ) if project_out else nn.Identity()
+        self.to_out = (
+            nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout))
+            if project_out
+            else nn.Identity()
+        )
 
     def __call__(self, x, mask=None):
         b, n, d = x.shape
         x = self.norm(x)
 
         queries, keys, values = self.wq(x), self.wk(x), self.wv(x)
-        reshaper = (lambda x: x.reshape(
-            b, n, self.heads, -1).transpose(0, 2, 1, 3))
+        reshaper = lambda x: x.reshape(b, n, self.heads, -1).transpose(0, 2, 1, 3)
         queries, keys, values = map(reshaper, (queries, keys, values))
 
         queries = self.rope(queries)
@@ -231,15 +259,16 @@ class Attention(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.):
+    def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.0):
         super().__init__()
         self.layers = []
         for _ in range(depth):
-            self.layers.append((
-                Attention(dim, heads=heads,
-                          dim_head=dim_head, dropout=dropout),
-                FeedForward(dim, mlp_dim, dropout=dropout)
-            ))
+            self.layers.append(
+                (
+                    Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout),
+                    FeedForward(dim, mlp_dim, dropout=dropout),
+                )
+            )
 
     def __call__(self, x):
         for attn, ff in self.layers:
@@ -250,30 +279,46 @@ class Transformer(nn.Module):
 
 
 class ViT(Base):
-    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim,
-                 pool='cls', channels=3, dim_head=64, dropout=0., emb_dropout=0.):
+    def __init__(
+        self,
+        *,
+        image_size,
+        patch_size,
+        num_classes,
+        dim,
+        depth,
+        heads,
+        mlp_dim,
+        pool="cls",
+        channels=3,
+        dim_head=64,
+        dropout=0.0,
+        emb_dropout=0.0,
+    ):
         super().__init__()
         image_height, image_width = pair(image_size)
         patch_height, patch_width = pair(patch_size)
 
-        assert image_height % patch_height == 0 and image_width % patch_width == 0, \
-            'Image dimensions must be divisible by the patch size.'
+        assert (
+            image_height % patch_height == 0 and image_width % patch_width == 0
+        ), "Image dimensions must be divisible by the patch size."
 
-        num_patches = (image_height // patch_height) * \
-            (image_width // patch_width)
+        num_patches = (image_height // patch_height) * (image_width // patch_width)
 
-        assert pool in {'cls', 'mean'}, \
-            'pool type must be either cls (cls token) or mean (mean pooling)'
+        assert pool in {
+            "cls",
+            "mean",
+        }, "pool type must be either cls (cls token) or mean (mean pooling)"
 
         self.to_patch_embedding = nn.Conv2d(
-            channels, dim, kernel_size=patch_size, stride=patch_size)
+            channels, dim, kernel_size=patch_size, stride=patch_size
+        )
 
         self.pos_embedding = mx.zeros((1, num_patches + 1, dim))
         self.cls_token = mx.zeros((1, 1, dim))
         self.dropout = nn.Dropout(emb_dropout)
 
-        self.transformer = Transformer(
-            dim, depth, heads, dim_head, mlp_dim, dropout)
+        self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim, dropout)
 
         self.pool = pool
         self.norm = nn.RMSNorm(dim)
@@ -292,6 +337,6 @@ class ViT(Base):
 
         x = self.transformer(x)
 
-        x = mx.mean(x, axis=1) if self.pool == 'mean' else x[:, 0]
+        x = mx.mean(x, axis=1) if self.pool == "mean" else x[:, 0]
 
         return self.mlp_head(self.norm(x))

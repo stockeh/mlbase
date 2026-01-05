@@ -1,18 +1,18 @@
 # June 7, 2022
+import copy
+import time
+
 import numpy as np
 import torch
-import time
-import copy
-
 import torch.nn.functional as F
 import torch_optimizer as optim
 
-from mlbase.networks.pytorch.optimizers.scg_optim_pytorch import SCG
 from mlbase.networks.pytorch.optimizers.alopex_optim_pytorch import Alopex
+from mlbase.networks.pytorch.optimizers.scg_optim_pytorch import SCG
 
 
 class EarlyStopping(object):
-    '''
+    """
     MIT License, Copyright (c) 2018 Stefano Nardo https://gist.github.com/stefanonardo
     es = EarlyStopping(patience=5)
 
@@ -23,9 +23,9 @@ class EarlyStopping(object):
         metric = eval(model, data_loader_dev)
         if es.step(metric):
             break  # early stop criterion is met, we can stop now
-    '''
+    """
 
-    def __init__(self, mode='min', min_delta=0, patience=10, percentage=False):
+    def __init__(self, mode="min", min_delta=0, patience=10, percentage=False):
         self.mode = mode
         self.min_delta = min_delta
         self.patience = patience
@@ -58,30 +58,29 @@ class EarlyStopping(object):
         return False
 
     def _init_is_better(self, mode, min_delta, percentage):
-        if mode not in {'min', 'max'}:
-            raise ValueError('mode ' + mode + ' is unknown!')
+        if mode not in {"min", "max"}:
+            raise ValueError("mode " + mode + " is unknown!")
         if not percentage:
-            if mode == 'min':
+            if mode == "min":
                 self.is_better = lambda a, best: a < best - min_delta
-            if mode == 'max':
+            if mode == "max":
                 self.is_better = lambda a, best: a > best + min_delta
         else:
-            if mode == 'min':
-                self.is_better = lambda a, best: a < best - (
-                    best * min_delta / 100)
-            if mode == 'max':
-                self.is_better = lambda a, best: a > best + (
-                    best * min_delta / 100)
+            if mode == "min":
+                self.is_better = lambda a, best: a < best - (best * min_delta / 100)
+            if mode == "max":
+                self.is_better = lambda a, best: a > best + (best * min_delta / 100)
 
 
-class NeuralNetwork():
+class NeuralNetwork:
 
     class Network(torch.nn.Module):
-        def __init__(self, n_inputs, n_hiddens_list, n_outputs, conv_layers, activation_f):
+        def __init__(
+            self, n_inputs, n_hiddens_list, n_outputs, conv_layers, activation_f
+        ):
             super().__init__()
             if not isinstance(n_hiddens_list, list):
-                raise Exception(
-                    'Network: n_hiddens_list must be a list.')
+                raise Exception("Network: n_hiddens_list must be a list.")
 
             if len(n_hiddens_list) == 0 or n_hiddens_list[0] == 0:
                 self.n_hidden_layers = 0
@@ -109,11 +108,11 @@ class NeuralNetwork():
             ]
             names = [str(o.__name__).lower() for o in activations]
             try:
-                activation = activations[names.index(
-                    str(activation_f).lower())]
+                activation = activations[names.index(str(activation_f).lower())]
             except:
                 raise NotImplementedError(
-                    f'__init__: {activation_f=} is not yet implemented.')
+                    f"__init__: {activation_f=} is not yet implemented."
+                )
             l = 0
             ni = np.asarray(n_inputs)
             # add convolutional layers
@@ -121,47 +120,63 @@ class NeuralNetwork():
             if self.conv_layers:
                 for conv_layer in self.conv_layers:
                     # check if 1d or 2d conv
-                    if 'convd' in conv_layer:
-                        convd = conv_layer['convd']
+                    if "convd" in conv_layer:
+                        convd = conv_layer["convd"]
                     else:
                         convd = 2  # assume 2D convoltuion
                     n_channels = ni[0]  # C,H,W  or  C,W
                     if convd == 2:  # 2D Conv
-                        self.model.add_module(f'conv_{l}', torch.nn.Conv2d(
-                            n_channels, conv_layer['n_units'], conv_layer['shape'],
-                            stride=1, padding='same', padding_mode='zeros'))
-                        self.model.add_module(f'activation_{l}', activation())
                         self.model.add_module(
-                            f'maxpool_{l}', torch.nn.MaxPool2d(2, stride=2))
+                            f"conv_{l}",
+                            torch.nn.Conv2d(
+                                n_channels,
+                                conv_layer["n_units"],
+                                conv_layer["shape"],
+                                stride=1,
+                                padding="same",
+                                padding_mode="zeros",
+                            ),
+                        )
+                        self.model.add_module(f"activation_{l}", activation())
+                        self.model.add_module(
+                            f"maxpool_{l}", torch.nn.MaxPool2d(2, stride=2)
+                        )
                     elif convd == 1:  # 1D Conv
-                        self.model.add_module(f'conv_{l}', torch.nn.Conv1d(
-                            n_channels, conv_layer['n_units'], conv_layer['shape'],
-                            stride=1, padding='same', padding_mode='zeros'))
-                        self.model.add_module(f'activation_{l}', activation())
                         self.model.add_module(
-                            f'maxpool_{l}', torch.nn.MaxPool1d(2, stride=2))
+                            f"conv_{l}",
+                            torch.nn.Conv1d(
+                                n_channels,
+                                conv_layer["n_units"],
+                                conv_layer["shape"],
+                                stride=1,
+                                padding="same",
+                                padding_mode="zeros",
+                            ),
+                        )
+                        self.model.add_module(f"activation_{l}", activation())
+                        self.model.add_module(
+                            f"maxpool_{l}", torch.nn.MaxPool1d(2, stride=2)
+                        )
                     # TODO: currently only to divide H, W dimensions by 2
                     # with 'same' padding
-                    ni = np.concatenate([[conv_layer['n_units']], ni[1:] // 2])
+                    ni = np.concatenate([[conv_layer["n_units"]], ni[1:] // 2])
                     l += 1
 
             if ni.ndim > 0:  # only the case with vectorized input features
-                self.model.add_module('flatten', torch.nn.Flatten())  # okay
+                self.model.add_module("flatten", torch.nn.Flatten())  # okay
             ni = np.prod(ni)
 
             # add fully-connected layers
             if self.n_hidden_layers > 0:
                 for i, n_units in enumerate(n_hiddens_list):
-                    self.model.add_module(
-                        f'linear_{l}', torch.nn.Linear(ni, n_units))
-                    self.model.add_module(f'activation_{l}', activation())
+                    self.model.add_module(f"linear_{l}", torch.nn.Linear(ni, n_units))
+                    self.model.add_module(f"activation_{l}", activation())
                     # if self.conv_layers:
                     #     self.model.add_module(
                     #         f'dropout_{l}', torch.nn.Dropout(0.2))
                     ni = n_units
                     l += 1
-            self.model.add_module(
-                f'output', torch.nn.Linear(ni, n_outputs))
+            self.model.add_module(f"output", torch.nn.Linear(ni, n_outputs))
 
             # self.model.apply(self._init_weights)
 
@@ -180,8 +195,16 @@ class NeuralNetwork():
             Ys = self.forward_all_outputs(X)
             return Ys[-1]
 
-    def __init__(self, n_inputs, n_hiddens_list, n_outputs, conv_layers=[],
-                 activation_f='tanh', use_gpu=True, seed=None):
+    def __init__(
+        self,
+        n_inputs,
+        n_hiddens_list,
+        n_outputs,
+        conv_layers=[],
+        activation_f="tanh",
+        use_gpu=True,
+        seed=None,
+    ):
         super().__init__()
 
         if seed is not None:
@@ -189,15 +212,16 @@ class NeuralNetwork():
         self.seed = seed
 
         if use_gpu and not torch.cuda.is_available():
-            print('\nGPU is not available. Running on CPU.\n')
+            print("\nGPU is not available. Running on CPU.\n")
             use_gpu = False
         self.use_gpu = use_gpu
-        self.device = torch.device('cuda' if use_gpu else 'cpu')
+        self.device = torch.device("cuda" if use_gpu else "cpu")
         self.classification = False
 
         # Build nnet
         self.model = self.Network(
-            n_inputs, n_hiddens_list, n_outputs, conv_layers, activation_f)
+            n_inputs, n_hiddens_list, n_outputs, conv_layers, activation_f
+        )
         self.model.to(self.device)
         self.loss = None
         self.optimizer = None
@@ -219,22 +243,23 @@ class NeuralNetwork():
         self.training_time = None
 
     def __repr__(self):
-        str = f'{type(self).__name__}({self.model.n_inputs}, {self.model.n_hiddens_list}, {self.model.n_outputs},'
-        str += f' {self.use_gpu=}, {self.seed=})'
+        str = f"{type(self).__name__}({self.model.n_inputs}, {self.model.n_hiddens_list}, {self.model.n_outputs},"
+        str += f" {self.use_gpu=}, {self.seed=})"
         if self.training_time is not None:
-            str += f'\n   Network was trained for {self.n_epochs} epochs'
-            str += f' that took {self.training_time:.4f} seconds.\n   Final objective values...'
-            str += f' train: {self.train_error_trace[-1]:.3f},'
+            str += f"\n   Network was trained for {self.n_epochs} epochs"
+            str += f" that took {self.training_time:.4f} seconds.\n   Final objective values..."
+            str += f" train: {self.train_error_trace[-1]:.3f},"
             if len(self.val_error_trace):
-                str += f'val: {self.val_error_trace[-1]:.3f}'
+                str += f"val: {self.val_error_trace[-1]:.3f}"
         else:
-            str += '  Network is not trained.'
+            str += "  Network is not trained."
         return str
 
     def summary(self):
         print(self.model)
         print(
-            f'Trainable Params: {sum(p.numel() for p in self.model.parameters() if p.requires_grad)}')
+            f"Trainable Params: {sum(p.numel() for p in self.model.parameters() if p.requires_grad)}"
+        )
 
     def _standardizeX(self, X):
         if self.standardize_x:
@@ -276,8 +301,16 @@ class NeuralNetwork():
     def _get_standardize_stats(self):
         o = None
         if self.Xmeans is not None:
-            o = (self.Xmeans, self.Xstds, self.Xconstant, self.XstdsFixed,
-                 self.Tmeans, self.Tstds, self.Tconstant, self.TstdsFixed)
+            o = (
+                self.Xmeans,
+                self.Xstds,
+                self.Xconstant,
+                self.XstdsFixed,
+                self.Tmeans,
+                self.Tstds,
+                self.Tconstant,
+                self.TstdsFixed,
+            )
         return o
 
     def _make_batches(self, X, T=None):
@@ -289,13 +322,13 @@ class NeuralNetwork():
         else:
             for i in range(0, X.shape[0], self.batch_size):
                 if T is None:
-                    yield X[i:i+self.batch_size]
+                    yield X[i : i + self.batch_size]
                 else:
-                    yield X[i:i+self.batch_size], T[i:i+self.batch_size]
+                    yield X[i : i + self.batch_size], T[i : i + self.batch_size]
 
     def _train(self, training_data, validation_data):
         # training
-        #---------------------------------------------------------------#
+        # ---------------------------------------------------------------#
         Xtrain, Ttrain = training_data
         self.model.train()
 
@@ -306,7 +339,7 @@ class NeuralNetwork():
                 return 0
             penalty = 0
             for name, p in self.model.named_parameters():
-                if 'weight' in name:
+                if "weight" in name:
                     penalty += p.pow(2.0).sum()
             # lambda / n * sum(w**2)
             return self.ridge_penalty / T.shape[0] * penalty
@@ -321,8 +354,9 @@ class NeuralNetwork():
                     X = X.to(self.device, non_blocking=True)
                     T = T.to(self.device, non_blocking=True)
                     Y = self.model(X)
-                    loss = (self.loss(Y, T) + _l2_regularization(T)) / \
-                        self.n_train_batches
+                    loss = (
+                        self.loss(Y, T) + _l2_regularization(T)
+                    ) / self.n_train_batches
                     loss.backward()
                     running_loss += loss.item()
                 return running_loss
@@ -331,7 +365,12 @@ class NeuralNetwork():
             self.train_error_trace.append(loss)
 
             self.scg_state.append(
-                {i: self.optimizer.state[i] for i in self.optimizer.state if i != 'losses'})
+                {
+                    i: self.optimizer.state[i]
+                    for i in self.optimizer.state
+                    if i != "losses"
+                }
+            )
 
         else:
             running_loss = 0
@@ -341,9 +380,11 @@ class NeuralNetwork():
                 T = T.to(self.device, non_blocking=True)
 
                 if isinstance(self.optimizer, Alopex):
+
                     def closure():
                         Y = self.model(X)
                         return self.loss(Y, T) + _l2_regularization(T)
+
                     loss = self.optimizer.step(closure)
                 else:
                     # compute prediction error
@@ -362,7 +403,7 @@ class NeuralNetwork():
             self.train_error_trace.append(running_loss)
 
         # validation
-        #---------------------------------------------------------------#
+        # ---------------------------------------------------------------#
         if validation_data is not None:
             Xval, Tval = validation_data
             running_loss = 0
@@ -378,14 +419,28 @@ class NeuralNetwork():
 
                 self.val_error_trace.append(running_loss)
 
-    def train(self, Xtrain, Ttrain, n_epochs, batch_size, learning_rate,
-              opt='adam', weight_decay=0, ridge_penalty=0, early_stopping=False,
-              validation_data=None, shuffle=False, verbose=True, standardize_x=True,
-              standardize_t=True):
+    def train(
+        self,
+        Xtrain,
+        Ttrain,
+        n_epochs,
+        batch_size,
+        learning_rate,
+        opt="adam",
+        weight_decay=0,
+        ridge_penalty=0,
+        early_stopping=False,
+        validation_data=None,
+        shuffle=False,
+        verbose=True,
+        standardize_x=True,
+        standardize_t=True,
+    ):
 
         if not isinstance(Xtrain, torch.Tensor):
-            Xtrain, Ttrain = list(map(lambda x: torch.from_numpy(
-                x).float(), [Xtrain, Ttrain]))
+            Xtrain, Ttrain = list(
+                map(lambda x: torch.from_numpy(x).float(), [Xtrain, Ttrain])
+            )
 
         self.standardize_x = standardize_x
         self.standardize_t = standardize_t if not self.classification else False
@@ -393,14 +448,14 @@ class NeuralNetwork():
         Xtrain = self._standardizeX(Xtrain)
 
         if validation_data is not None:
-            assert len(
-                validation_data) == 2, 'validation_data: must be (Xval, Tval).'
+            assert len(validation_data) == 2, "validation_data: must be (Xval, Tval)."
             Xval, Tval = validation_data[0], validation_data[1]
             if verbose and not self.classification and standardize_t:
-                print(f'{Tval.mean()=:.3f}, {Tval.std()=:.3f}')
+                print(f"{Tval.mean()=:.3f}, {Tval.std()=:.3f}")
             if not isinstance(Xval, torch.Tensor):
-                Xval, Tval = list(map(lambda x: torch.from_numpy(
-                    x).float(), [Xval, Tval]))
+                Xval, Tval = list(
+                    map(lambda x: torch.from_numpy(x).float(), [Xval, Tval])
+                )
             Xval = self._standardizeX(Xval)
 
         if self.classification:
@@ -456,41 +511,41 @@ class NeuralNetwork():
             ]
             names = [str(o.__name__).lower() for o in optimizers]
             try:
-                if str(opt).lower() == 'scg':  # no learning rate
+                if str(opt).lower() == "scg":  # no learning rate
                     self.optimizer = optimizers[names.index(str(opt).lower())](
-                        self.model.parameters())
+                        self.model.parameters()
+                    )
                     self.scg_state = []
-                elif str(opt).lower() == 'alopex':
+                elif str(opt).lower() == "alopex":
                     # TODO: what to do with `temp_iter`...
-                    N = 1 if batch_size == - \
-                        1 else Xtrain.shape[0] // batch_size
+                    N = 1 if batch_size == -1 else Xtrain.shape[0] // batch_size
                     self.optimizer = optimizers[names.index(str(opt).lower())](
-                        self.model.parameters(), eta0=learning_rate, N=N)
+                        self.model.parameters(), eta0=learning_rate, N=N
+                    )
                 else:
                     self.optimizer = optimizers[names.index(str(opt).lower())](
-                        self.model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+                        self.model.parameters(),
+                        lr=learning_rate,
+                        weight_decay=weight_decay,
+                    )
             except:
-                raise NotImplementedError(
-                    f'train: {opt=} is not yet implemented.')
+                raise NotImplementedError(f"train: {opt=} is not yet implemented.")
 
         # compute mini-batch sizes
-        _minibatch = batch_size != - \
-            1 and batch_size != Xtrain.shape[0]
+        _minibatch = batch_size != -1 and batch_size != Xtrain.shape[0]
         # train
         train_bs = batch_size if _minibatch else Xtrain.shape[0]
-        self.n_train_batches = (
-            Xtrain.shape[0] + train_bs - 1) // train_bs
+        self.n_train_batches = (Xtrain.shape[0] + train_bs - 1) // train_bs
         # val
         if validation_data is not None:
             val_bs = batch_size if _minibatch else Xval.shape[0]
-            self.n_val_batches = (
-                Xval.shape[0] + val_bs - 1) // val_bs
+            self.n_val_batches = (Xval.shape[0] + val_bs - 1) // val_bs
 
         print_every = n_epochs // 10 if n_epochs > 9 else 1
         if early_stopping:
             es = EarlyStopping(patience=5)
         # training loop
-        #---------------------------------------------------------------#
+        # ---------------------------------------------------------------#
         start_time = time.time()
         for epoch in range(n_epochs):
             if shuffle:  # shuffle after every epoch
@@ -500,26 +555,29 @@ class NeuralNetwork():
                 Xtrain = Xtrain[train_inds]
                 Ttrain = Ttrain[train_inds]
             # forward, grad, backprop
-            self._train((Xtrain, Ttrain), (Xval, Tval)
-                        if validation_data is not None else None)
-            if early_stopping and validation_data is not None and es.step(self.val_error_trace[-1]):
+            self._train(
+                (Xtrain, Ttrain), (Xval, Tval) if validation_data is not None else None
+            )
+            if (
+                early_stopping
+                and validation_data is not None
+                and es.step(self.val_error_trace[-1])
+            ):
                 self.n_epochs = epoch + 1
                 break  # early stop criterion is met, we can stop now
             if verbose and (epoch + 1) % print_every == 0:
-                st = f'Epoch {epoch + 1} error - train: {self.train_error_trace[-1]:.5f},'
+                st = f"Epoch {epoch + 1} error - train: {self.train_error_trace[-1]:.5f},"
                 if validation_data is not None:
-                    st += f' val: {self.val_error_trace[-1]:.5f}'
+                    st += f" val: {self.val_error_trace[-1]:.5f}"
                 print(st)
             # print(self.optimizer.state['n_successes'],
             #       '/', self.optimizer.state['n_vars'])
         self.training_time = time.time() - start_time
 
         # remove data from gpu, needed?
-        Xtrain, Ttrain = list(
-            map(lambda x: x.detach().cpu().numpy(), [Xtrain, Ttrain]))
+        Xtrain, Ttrain = list(map(lambda x: x.detach().cpu().numpy(), [Xtrain, Ttrain]))
         if validation_data is not None:
-            Xval, Tval = list(
-                map(lambda x: x.detach().cpu().numpy(), [Xval, Tval]))
+            Xval, Tval = list(map(lambda x: x.detach().cpu().numpy(), [Xval, Tval]))
         torch.cuda.empty_cache()
 
         # convert loss to likelihood
@@ -554,7 +612,7 @@ class NeuralNetwork():
                     if Ys is None:
                         Ys = [np.zeros((nsamples, *y.shape[1:])) for y in Y]
                     for j in range(len(Ys)):
-                        Ys[j][i:i+end] = Y[j]
+                        Ys[j][i : i + end] = Y[j]
                     i += end
         except RuntimeError:
             raise
@@ -587,12 +645,13 @@ class NeuralNetworkClassifier(NeuralNetwork):
             if all_output: predicted classes, all layers + softmax
             else: predicted classes
         """
-        # turn off gradients and other aspects of training
-        def probf(l): return torch.sigmoid(
-            l) if l.shape[1] == 1 else F.softmax(l, dim=1)
 
-        def maxf(p): return np.where(
-            p > 0.5, 1, 0) if p.shape[1] == 1 else p.argmax(1)
+        # turn off gradients and other aspects of training
+        def probf(l):
+            return torch.sigmoid(l) if l.shape[1] == 1 else F.softmax(l, dim=1)
+
+        def maxf(p):
+            return np.where(p > 0.5, 1, 0) if p.shape[1] == 1 else p.argmax(1)
 
         self.model.eval()
         try:
@@ -613,10 +672,9 @@ class NeuralNetworkClassifier(NeuralNetwork):
                         logits = Y[-1]
                         Y = [y.detach().cpu().numpy() for y in Y]
                         if Ys is None:
-                            Ys = [np.zeros((nsamples, *y.shape[1:]))
-                                  for y in Y]
+                            Ys = [np.zeros((nsamples, *y.shape[1:])) for y in Y]
                         for j in range(len(Ys)):
-                            Ys[j][i:i+end] = Y[j]
+                            Ys[j][i : i + end] = Y[j]
                         i += end
                     else:
                         logits = self.model(x)
@@ -636,106 +694,134 @@ class NeuralNetworkClassifier(NeuralNetwork):
             return Y
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import matplotlib.pyplot as plt
+
     plt.ion()
 
-    def rmse(A, B): return np.sqrt(np.mean((A - B)**2))
-    def accuracy(A, B): return 100. * np.mean(A == B)
-    br = ''.join(['-']*8)
+    def rmse(A, B):
+        return np.sqrt(np.mean((A - B) ** 2))
 
-    print(f'{br}Testing NeuralNetwork for regression{br}')
-    #---------------------------------------------------------------#
+    def accuracy(A, B):
+        return 100.0 * np.mean(A == B)
+
+    br = "".join(["-"] * 8)
+
+    print(f"{br}Testing NeuralNetwork for regression{br}")
+    # ---------------------------------------------------------------#
     X = np.arange(100).reshape((-1, 1))
     T = np.sin(X * 0.04)
 
     n_hiddens_list = [10, 10]
 
-    nnet = NeuralNetwork(X.shape[1], n_hiddens_list,
-                         T.shape[1], activation_f='tanh')
+    nnet = NeuralNetwork(X.shape[1], n_hiddens_list, T.shape[1], activation_f="tanh")
     nnet.summary()
-    nnet.train(X, T, n_epochs=1000, batch_size=32,
-               learning_rate=0.01, opt='sgd')
+    nnet.train(X, T, n_epochs=1000, batch_size=32, learning_rate=0.01, opt="sgd")
     Y = nnet.use(X)
 
-    print(f'RMSE: {rmse(T, Y):.3f}')
+    print(f"RMSE: {rmse(T, Y):.3f}")
     plt.figure(1)
     plt.plot(nnet.train_error_trace)
 
-    print(f'{br}Testing NeuralNetwork for CNN regression{br}')
-    #---------------------------------------------------------------#
+    print(f"{br}Testing NeuralNetwork for CNN regression{br}")
+    # ---------------------------------------------------------------#
     # TODO: requires C, H, W dimensions
     X = np.zeros((100, 1, 10, 10))
     T = np.zeros((100, 1))
     for i in range(100):
         col = i // 10
-        X[i, :, 0: col + 1, 0] = 1
+        X[i, :, 0 : col + 1, 0] = 1
         T[i, 0] = col + 1
 
-    conv_layers = [{'n_units': 1, 'shape': [3, 3]},
-                   {'n_units': 1, 'shape': [3, 3]}]
+    conv_layers = [{"n_units": 1, "shape": [3, 3]}, {"n_units": 1, "shape": [3, 3]}]
     n_hiddens_list = [10]
 
-    nnet = NeuralNetwork(X.shape[1:], n_hiddens_list,
-                         T.shape[1], conv_layers, activation_f='tanh')
+    nnet = NeuralNetwork(
+        X.shape[1:], n_hiddens_list, T.shape[1], conv_layers, activation_f="tanh"
+    )
     nnet.summary()
-    nnet.train(X, T, n_epochs=1000, batch_size=32,
-               learning_rate=0.001, opt='adam')
+    nnet.train(X, T, n_epochs=1000, batch_size=32, learning_rate=0.001, opt="adam")
     Y = nnet.use(X)
 
-    print(f'RMSE: {rmse(T, Y):.3f}')
+    print(f"RMSE: {rmse(T, Y):.3f}")
     plt.figure(2)
     plt.plot(nnet.train_error_trace)
 
-    print(f'{br}Testing NeuralNetwork for CNN classification (BCE){br}')
-    #---------------------------------------------------------------#
+    print(f"{br}Testing NeuralNetwork for CNN classification (BCE){br}")
+    # ---------------------------------------------------------------#
     X = np.zeros((100, 1, 10, 10))
     T = np.zeros((100, 1))
     for i in range(100):
         col = i // 10
-        X[i, 0, :, 0: col + 1] = 1
+        X[i, 0, :, 0 : col + 1] = 1
         # TODO: class must be between [0, num_classes-1]
         T[i, 0] = 0 if col < 5 else 1
 
-    n_hiddens_list = [5]*2
-    conv_layers = [{'n_units': 3, 'shape': 3},
-                   {'n_units': 1, 'shape': [3, 3]}]
+    n_hiddens_list = [5] * 2
+    conv_layers = [{"n_units": 3, "shape": 3}, {"n_units": 1, "shape": [3, 3]}]
 
-    nnet = NeuralNetworkClassifier(X.shape[1:], n_hiddens_list, len(
-        np.unique(T)), conv_layers, use_gpu=True, seed=None)
+    nnet = NeuralNetworkClassifier(
+        X.shape[1:],
+        n_hiddens_list,
+        len(np.unique(T)),
+        conv_layers,
+        use_gpu=True,
+        seed=None,
+    )
     nnet.summary()
     print(nnet.loss)
-    nnet.train(X, T, validation_data=None,
-               n_epochs=50, batch_size=32, learning_rate=0.01, opt='adam',  # accsgd
-               ridge_penalty=0, verbose=True)
+    nnet.train(
+        X,
+        T,
+        validation_data=None,
+        n_epochs=50,
+        batch_size=32,
+        learning_rate=0.01,
+        opt="adam",  # accsgd
+        ridge_penalty=0,
+        verbose=True,
+    )
     Y = nnet.use(X)
-    print(f'Accuracy: {accuracy(Y, T):.3f}')
+    print(f"Accuracy: {accuracy(Y, T):.3f}")
     plt.figure(3)
     plt.plot(nnet.train_error_trace)
 
-    print(f'{br}Testing NeuralNetwork for CNN classification (NLL){br}')
-    #---------------------------------------------------------------#
+    print(f"{br}Testing NeuralNetwork for CNN classification (NLL){br}")
+    # ---------------------------------------------------------------#
     X = np.zeros((100, 1, 10, 10))
     T = np.zeros((100, 1))
     for i in range(100):
         col = i // 10
-        X[i, 0, :, 0: col + 1] = 1
+        X[i, 0, :, 0 : col + 1] = 1
         # TODO: class must be between [0, num_classes-1]
         T[i, 0] = 0 if col < 3 else 1 if col < 7 else 2
 
-    n_hiddens_list = [5]*2
-    conv_layers = [{'n_units': 3, 'shape': 3},
-                   {'n_units': 1, 'shape': [3, 3]}]
+    n_hiddens_list = [5] * 2
+    conv_layers = [{"n_units": 3, "shape": 3}, {"n_units": 1, "shape": [3, 3]}]
 
-    nnet = NeuralNetworkClassifier(X.shape[1:], n_hiddens_list, len(
-        np.unique(T)), conv_layers, use_gpu=True, seed=None)
+    nnet = NeuralNetworkClassifier(
+        X.shape[1:],
+        n_hiddens_list,
+        len(np.unique(T)),
+        conv_layers,
+        use_gpu=True,
+        seed=None,
+    )
     nnet.summary()
     print(nnet.loss)
-    nnet.train(X, T, validation_data=None,
-               n_epochs=50, batch_size=32, learning_rate=0.01, opt='adam',  # accsgd
-               ridge_penalty=0, verbose=True)
+    nnet.train(
+        X,
+        T,
+        validation_data=None,
+        n_epochs=50,
+        batch_size=32,
+        learning_rate=0.01,
+        opt="adam",  # accsgd
+        ridge_penalty=0,
+        verbose=True,
+    )
     Y = nnet.use(X)
-    print(f'Accuracy: {accuracy(Y, T):.3f}')
+    print(f"Accuracy: {accuracy(Y, T):.3f}")
     plt.figure(4)
     plt.plot(nnet.train_error_trace)
 

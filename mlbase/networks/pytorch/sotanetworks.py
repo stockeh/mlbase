@@ -1,15 +1,15 @@
 # Jul 18, 2022
+import copy
+import time
+
 import numpy as np
 import torch
-import time
-import copy
-
 import torch.nn.functional as F
 import torch_optimizer as optim
 
 
 class EarlyStopping(object):
-    '''
+    """
     MIT License, Copyright (c) 2018 Stefano Nardo https://gist.github.com/stefanonardo
     es = EarlyStopping(patience=5)
 
@@ -20,9 +20,9 @@ class EarlyStopping(object):
         metric = eval(model, data_loader_dev)
         if es.step(metric):
             break  # early stop criterion is met, we can stop now
-    '''
+    """
 
-    def __init__(self, mode='min', min_delta=0, patience=10, percentage=False):
+    def __init__(self, mode="min", min_delta=0, patience=10, percentage=False):
         self.mode = mode
         self.min_delta = min_delta
         self.patience = patience
@@ -55,39 +55,45 @@ class EarlyStopping(object):
         return False
 
     def _init_is_better(self, mode, min_delta, percentage):
-        if mode not in {'min', 'max'}:
-            raise ValueError('mode ' + mode + ' is unknown!')
+        if mode not in {"min", "max"}:
+            raise ValueError("mode " + mode + " is unknown!")
         if not percentage:
-            if mode == 'min':
+            if mode == "min":
                 self.is_better = lambda a, best: a < best - min_delta
-            if mode == 'max':
+            if mode == "max":
                 self.is_better = lambda a, best: a > best + min_delta
         else:
-            if mode == 'min':
-                self.is_better = lambda a, best: a < best - (
-                    best * min_delta / 100)
-            if mode == 'max':
-                self.is_better = lambda a, best: a > best + (
-                    best * min_delta / 100)
+            if mode == "min":
+                self.is_better = lambda a, best: a < best - (best * min_delta / 100)
+            if mode == "max":
+                self.is_better = lambda a, best: a > best + (best * min_delta / 100)
 
 
-class NeuralNetwork():
+class NeuralNetwork:
 
-    def __init__(self, model_name, n_inputs, n_outputs, feature_extract=False,
-                 weights=None, use_gpu=True, seed=None):
+    def __init__(
+        self,
+        model_name,
+        n_inputs,
+        n_outputs,
+        feature_extract=False,
+        weights=None,
+        use_gpu=True,
+        seed=None,
+    ):
         super().__init__()
 
-        assert len(n_inputs) == 3, 'input shape must be (C, W, H).'
+        assert len(n_inputs) == 3, "input shape must be (C, W, H)."
 
         if seed is not None:
             torch.manual_seed(seed)
         self.seed = seed
 
         if use_gpu and not torch.cuda.is_available():
-            print('\nGPU is not available. Running on CPU.\n')
+            print("\nGPU is not available. Running on CPU.\n")
             use_gpu = False
         self.use_gpu = use_gpu
-        self.device = torch.device('cuda' if use_gpu else 'cpu')
+        self.device = torch.device("cuda" if use_gpu else "cpu")
         self.classification = False
 
         # Build nnet
@@ -95,9 +101,13 @@ class NeuralNetwork():
         self.n_inputs = n_inputs
         self.n_outputs = n_outputs
         self._initialize_model(
-            self.model_name, self.n_inputs[0], self.n_outputs, feature_extract, weights)
-        self.upsample = torch.nn.UpsamplingBilinear2d(
-            size=self.input_size) if self.n_inputs[1] != self.input_size else None
+            self.model_name, self.n_inputs[0], self.n_outputs, feature_extract, weights
+        )
+        self.upsample = (
+            torch.nn.UpsamplingBilinear2d(size=self.input_size)
+            if self.n_inputs[1] != self.input_size
+            else None
+        )
 
         self.model.to(self.device)
         self.loss = None
@@ -113,7 +123,8 @@ class NeuralNetwork():
 
         # Bookkeeping
         self.trainable_params = sum(
-            p.numel() for p in self.model.parameters() if p.requires_grad)
+            p.numel() for p in self.model.parameters() if p.requires_grad
+        )
         self.train_error_trace = []
         self.val_error_trace = []
         self.n_epochs = None
@@ -122,16 +133,16 @@ class NeuralNetwork():
         self.training_time = None
 
     def __repr__(self):
-        str = f'{type(self).__name__}({self.model_name}, {self.n_outputs},'
-        str += f' {self.use_gpu=}, {self.seed=})'
+        str = f"{type(self).__name__}({self.model_name}, {self.n_outputs},"
+        str += f" {self.use_gpu=}, {self.seed=})"
         if self.training_time is not None:
-            str += f'\n   Network was trained for {self.n_epochs} epochs'
-            str += f' that took {self.training_time:.4f} seconds.\n   Final objective values...'
-            str += f' train: {self.train_error_trace[-1]:.3f},'
+            str += f"\n   Network was trained for {self.n_epochs} epochs"
+            str += f" that took {self.training_time:.4f} seconds.\n   Final objective values..."
+            str += f" train: {self.train_error_trace[-1]:.3f},"
             if len(self.val_error_trace):
-                str += f'val: {self.val_error_trace[-1]:.3f}'
+                str += f"val: {self.val_error_trace[-1]:.3f}"
         else:
-            str += '  Network is not trained.'
+            str += "  Network is not trained."
         return str
 
     def _set_parameter_requires_grad(self, model, feature_extracting):
@@ -139,46 +150,51 @@ class NeuralNetwork():
             for param in model.parameters():
                 param.requires_grad = False
 
-    def _initialize_model(self, model_name, input_channels, n_outputs, feature_extract, weights):
+    def _initialize_model(
+        self, model_name, input_channels, n_outputs, feature_extract, weights
+    ):
         """
         :param feature_extract: False, the model is finetuned and all model parameters are updated.
                                 True, only the last layer parameters are updated, the others remain fixed.
         """
         try:
-            self.model = torch.hub.load(
-                'pytorch/vision', model_name, weights=weights)
+            self.model = torch.hub.load("pytorch/vision", model_name, weights=weights)
         except:
-            raise Exception('Invalid model name, exiting...')
+            raise Exception("Invalid model name, exiting...")
 
         self.input_size = 224
 
-        if 'resnet' in model_name:
-            """ Resnet50/18/etc.
-            """
+        if "resnet" in model_name:
+            """Resnet50/18/etc."""
             self._set_parameter_requires_grad(self.model, feature_extract)
             num_ftrs = self.model.fc.in_features
             self.model.fc = torch.nn.Linear(num_ftrs, n_outputs)
 
-            self.model.conv1 = torch.nn.Conv2d(input_channels, 64, kernel_size=(
-                7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+            self.model.conv1 = torch.nn.Conv2d(
+                input_channels,
+                64,
+                kernel_size=(7, 7),
+                stride=(2, 2),
+                padding=(3, 3),
+                bias=False,
+            )
 
-        elif 'squeezenet' in model_name:
-            """ Squeezenet
-            """
+        elif "squeezenet" in model_name:
+            """Squeezenet"""
             self._set_parameter_requires_grad(self.model, feature_extract)
             self.model.classifier[1] = torch.nn.Conv2d(
-                512, n_outputs, kernel_size=(1, 1), stride=(1, 1))
+                512, n_outputs, kernel_size=(1, 1), stride=(1, 1)
+            )
             self.model.num_classes = n_outputs
 
-        elif 'densenet' in model_name:
-            """ Densenet
-            """
+        elif "densenet" in model_name:
+            """Densenet"""
             self._set_parameter_requires_grad(self.model, feature_extract)
             num_ftrs = self.model.classifier.in_features
             self.model.classifier = torch.nn.Linear(num_ftrs, n_outputs)
 
-        elif 'inception' in model_name:
-            """ Inception v3
+        elif "inception" in model_name:
+            """Inception v3
             Be careful, expects (299,299) sized images and has auxiliary output
             """
             self._set_parameter_requires_grad(self.model, feature_extract)
@@ -191,9 +207,13 @@ class NeuralNetwork():
             self.model.fc = torch.nn.Linear(num_ftrs, n_outputs)
             self.input_size = 299
 
-        elif any(map(model_name.__contains__, ['efficientnet', 'convnext', 'mobilenet',
-                                               'alexnet', 'vgg'])):
-            """ 
+        elif any(
+            map(
+                model_name.__contains__,
+                ["efficientnet", "convnext", "mobilenet", "alexnet", "vgg"],
+            )
+        ):
+            """
             EfficientNet b0/b1/etc.
             ConvNeXt tiny/small/base/large.
             MobileNet v2/v3_small/etc.
@@ -205,11 +225,11 @@ class NeuralNetwork():
             self.model.classifier[-1] = torch.nn.Linear(num_ftrs, n_outputs)
 
         else:
-            raise Exception('Invalid model name, exiting...')
+            raise Exception("Invalid model name, exiting...")
 
     def summary(self):
         print(self.model)
-        print(f'Trainable Params: {self.trainable_params}')
+        print(f"Trainable Params: {self.trainable_params}")
 
     def _standardizeX(self, X):
         if self.standardize_x:
@@ -251,8 +271,16 @@ class NeuralNetwork():
     def _get_standardize_stats(self):
         o = None
         if self.Xmeans is not None:
-            o = (self.Xmeans, self.Xstds, self.Xconstant, self.XstdsFixed,
-                 self.Tmeans, self.Tstds, self.Tconstant, self.TstdsFixed)
+            o = (
+                self.Xmeans,
+                self.Xstds,
+                self.Xconstant,
+                self.XstdsFixed,
+                self.Tmeans,
+                self.Tstds,
+                self.Tconstant,
+                self.TstdsFixed,
+            )
         return o
 
     def _upsample_tensor(self, X):
@@ -268,13 +296,13 @@ class NeuralNetwork():
         else:
             for i in range(0, X.shape[0], self.batch_size):
                 if T is None:
-                    yield X[i:i+self.batch_size]
+                    yield X[i : i + self.batch_size]
                 else:
-                    yield X[i:i+self.batch_size], T[i:i+self.batch_size]
+                    yield X[i : i + self.batch_size], T[i : i + self.batch_size]
 
     def _train(self, training_data, validation_data):
         # training
-        #---------------------------------------------------------------#
+        # ---------------------------------------------------------------#
         Xtrain, Ttrain = training_data
         self.model.train()
 
@@ -285,7 +313,7 @@ class NeuralNetwork():
                 return 0
             penalty = 0
             for name, p in self.model.named_parameters():
-                if 'weight' in name:
+                if "weight" in name:
                     penalty += p.pow(2.0).sum()
             # lambda / n * sum(w**2)
             return self.ridge_penalty / T.shape[0] * penalty
@@ -311,7 +339,7 @@ class NeuralNetwork():
         self.train_error_trace.append(running_loss)
 
         # validation
-        #---------------------------------------------------------------#
+        # ---------------------------------------------------------------#
         if validation_data is not None:
             Xval, Tval = validation_data
             running_loss = 0
@@ -327,14 +355,28 @@ class NeuralNetwork():
 
                 self.val_error_trace.append(running_loss)
 
-    def train(self, Xtrain, Ttrain, n_epochs, batch_size, learning_rate,
-              opt='adam', weight_decay=0, ridge_penalty=0, early_stopping=False,
-              validation_data=None, shuffle=False, verbose=True, standardize_x=True,
-              standardize_t=True):
+    def train(
+        self,
+        Xtrain,
+        Ttrain,
+        n_epochs,
+        batch_size,
+        learning_rate,
+        opt="adam",
+        weight_decay=0,
+        ridge_penalty=0,
+        early_stopping=False,
+        validation_data=None,
+        shuffle=False,
+        verbose=True,
+        standardize_x=True,
+        standardize_t=True,
+    ):
 
         if not isinstance(Xtrain, torch.Tensor):
-            Xtrain, Ttrain = list(map(lambda x: torch.from_numpy(
-                x).float(), [Xtrain, Ttrain]))
+            Xtrain, Ttrain = list(
+                map(lambda x: torch.from_numpy(x).float(), [Xtrain, Ttrain])
+            )
 
         Xtrain = self._upsample_tensor(Xtrain)
 
@@ -344,14 +386,14 @@ class NeuralNetwork():
         Xtrain = self._standardizeX(Xtrain)
 
         if validation_data is not None:
-            assert len(
-                validation_data) == 2, 'validation_data: must be (Xval, Tval).'
+            assert len(validation_data) == 2, "validation_data: must be (Xval, Tval)."
             Xval, Tval = validation_data[0], validation_data[1]
             if verbose and not self.classification and standardize_t:
-                print(f'{Tval.mean()=:.3f}, {Tval.std()=:.3f}')
+                print(f"{Tval.mean()=:.3f}, {Tval.std()=:.3f}")
             if not isinstance(Xval, torch.Tensor):
-                Xval, Tval = list(map(lambda x: torch.from_numpy(
-                    x).float(), [Xval, Tval]))
+                Xval, Tval = list(
+                    map(lambda x: torch.from_numpy(x).float(), [Xval, Tval])
+                )
             Xval = self._standardizeX(self._upsample_tensor(Xval))
 
         if self.loss is not None and self.classification:
@@ -406,29 +448,26 @@ class NeuralNetwork():
             names = [str(o.__name__).lower() for o in optimizers]
             try:
                 self.optimizer = optimizers[names.index(str(opt).lower())](
-                    self.model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+                    self.model.parameters(), lr=learning_rate, weight_decay=weight_decay
+                )
             except:
-                raise NotImplementedError(
-                    f'train: {opt=} is not yet implemented.')
+                raise NotImplementedError(f"train: {opt=} is not yet implemented.")
 
         # compute mini-batch sizes
-        _minibatch = batch_size != - \
-            1 and batch_size != Xtrain.shape[0]
+        _minibatch = batch_size != -1 and batch_size != Xtrain.shape[0]
         # train
         train_bs = batch_size if _minibatch else Xtrain.shape[0]
-        self.n_train_batches = (
-            Xtrain.shape[0] + train_bs - 1) // train_bs
+        self.n_train_batches = (Xtrain.shape[0] + train_bs - 1) // train_bs
         # val
         if validation_data is not None:
             val_bs = batch_size if _minibatch else Xval.shape[0]
-            self.n_val_batches = (
-                Xval.shape[0] + val_bs - 1) // val_bs
+            self.n_val_batches = (Xval.shape[0] + val_bs - 1) // val_bs
 
         print_every = n_epochs // 10 if n_epochs > 9 else 1
         if early_stopping:
             es = EarlyStopping(patience=5)
         # training loop
-        #---------------------------------------------------------------#
+        # ---------------------------------------------------------------#
         start_time = time.time()
         for epoch in range(n_epochs):
             if shuffle:  # shuffle after every epoch
@@ -438,24 +477,27 @@ class NeuralNetwork():
                 Xtrain = Xtrain[train_inds]
                 Ttrain = Ttrain[train_inds]
             # forward, grad, backprop
-            self._train((Xtrain, Ttrain), (Xval, Tval)
-                        if validation_data is not None else None)
-            if early_stopping and validation_data is not None and es.step(self.val_error_trace[-1]):
+            self._train(
+                (Xtrain, Ttrain), (Xval, Tval) if validation_data is not None else None
+            )
+            if (
+                early_stopping
+                and validation_data is not None
+                and es.step(self.val_error_trace[-1])
+            ):
                 self.n_epochs = epoch + 1
                 break  # early stop criterion is met, we can stop now
             if verbose and (epoch + 1) % print_every == 0:
-                st = f'Epoch {epoch + 1} error - train: {self.train_error_trace[-1]:.5f},'
+                st = f"Epoch {epoch + 1} error - train: {self.train_error_trace[-1]:.5f},"
                 if validation_data is not None:
-                    st += f' val: {self.val_error_trace[-1]:.5f}'
+                    st += f" val: {self.val_error_trace[-1]:.5f}"
                 print(st)
         self.training_time = time.time() - start_time
 
         # remove data from gpu, needed?
-        Xtrain, Ttrain = list(
-            map(lambda x: x.detach().cpu().numpy(), [Xtrain, Ttrain]))
+        Xtrain, Ttrain = list(map(lambda x: x.detach().cpu().numpy(), [Xtrain, Ttrain]))
         if validation_data is not None:
-            Xval, Tval = list(
-                map(lambda x: x.detach().cpu().numpy(), [Xval, Tval]))
+            Xval, Tval = list(map(lambda x: x.detach().cpu().numpy(), [Xval, Tval]))
         torch.cuda.empty_cache()
 
     def use(self, X):
@@ -495,12 +537,13 @@ class NeuralNetworkClassifier(NeuralNetwork):
             if all_output: predicted classes, all layers + softmax
             else: predicted classes
         """
-        # turn off gradients and other aspects of training
-        def probf(l): return torch.sigmoid(
-            l) if l.shape[1] == 1 else F.softmax(l, dim=1)
 
-        def maxf(p): return np.where(
-            p > 0.5, 1, 0) if p.shape[1] == 1 else p.argmax(1)
+        # turn off gradients and other aspects of training
+        def probf(l):
+            return torch.sigmoid(l) if l.shape[1] == 1 else F.softmax(l, dim=1)
+
+        def maxf(p):
+            return np.where(p > 0.5, 1, 0) if p.shape[1] == 1 else p.argmax(1)
 
         self.model.eval()
         try:
@@ -521,10 +564,9 @@ class NeuralNetworkClassifier(NeuralNetwork):
                         logits = Y[-1]
                         Y = [y.detach().cpu().numpy() for y in Y]
                         if Ys is None:
-                            Ys = [np.zeros((nsamples, *y.shape[1:]))
-                                  for y in Y]
+                            Ys = [np.zeros((nsamples, *y.shape[1:])) for y in Y]
                         for j in range(len(Ys)):
-                            Ys[j][i:i+end] = Y[j]
+                            Ys[j][i : i + end] = Y[j]
                         i += end
                     else:
                         logits = self.model(x)
@@ -544,54 +586,87 @@ class NeuralNetworkClassifier(NeuralNetwork):
             return Y
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import matplotlib.pyplot as plt
+
     plt.ion()
 
-    def rmse(A, B): return np.sqrt(np.mean((A - B)**2))
-    def accuracy(A, B): return 100. * np.mean(A == B)
-    br = ''.join(['-']*8)
+    def rmse(A, B):
+        return np.sqrt(np.mean((A - B) ** 2))
 
-    print(f'{br}Testing NeuralNetwork for CNN regression{br}')
-    #---------------------------------------------------------------#
+    def accuracy(A, B):
+        return 100.0 * np.mean(A == B)
+
+    br = "".join(["-"] * 8)
+
+    print(f"{br}Testing NeuralNetwork for CNN regression{br}")
+    # ---------------------------------------------------------------#
     X = np.zeros((100, 3, 10, 10))
     T = np.zeros((100, 1), dtype=int)
     for i in range(X.shape[0]):
         col = i // 10
-        X[i, :, 0: col + 1, 0] = 1
+        X[i, :, 0 : col + 1, 0] = 1
         T[i, 0] = col + 1
 
-    nnet = NeuralNetwork('alexnet', X.shape[1:], T.shape[1],
-                         feature_extract=False, weights=None,
-                         use_gpu=True, seed=1234)
+    nnet = NeuralNetwork(
+        "alexnet",
+        X.shape[1:],
+        T.shape[1],
+        feature_extract=False,
+        weights=None,
+        use_gpu=True,
+        seed=1234,
+    )
     nnet.summary()
-    nnet.train(X, T, n_epochs=50, batch_size=32, learning_rate=0.0001,
-               opt='adam', verbose=True, shuffle=True)
+    nnet.train(
+        X,
+        T,
+        n_epochs=50,
+        batch_size=32,
+        learning_rate=0.0001,
+        opt="adam",
+        verbose=True,
+        shuffle=True,
+    )
 
     Y = nnet.use(X)
-    print(f'rmse={rmse(T, Y):.3f}')
+    print(f"rmse={rmse(T, Y):.3f}")
     plt.figure(1)
     plt.plot(nnet.train_error_trace)
 
-    print(f'{br}Testing NeuralNetwork for CNN classification{br}')
-    #---------------------------------------------------------------#
+    print(f"{br}Testing NeuralNetwork for CNN classification{br}")
+    # ---------------------------------------------------------------#
     X = np.zeros((100, 3, 10, 10))
     T = np.zeros((100, 1))
     for i in range(100):
         col = i // 10
-        X[i, 0, :, 0: col + 1] = 1
+        X[i, 0, :, 0 : col + 1] = 1
         # TODO: class must be between [0, num_classes-1]
         T[i, 0] = 0 if col < 3 else 1 if col < 7 else 2
 
-    nnet = NeuralNetworkClassifier('alexnet', X.shape[1:], len(np.unique(T)),
-                                   feature_extract=False, weights=None,
-                                   use_gpu=True, seed=1234)
+    nnet = NeuralNetworkClassifier(
+        "alexnet",
+        X.shape[1:],
+        len(np.unique(T)),
+        feature_extract=False,
+        weights=None,
+        use_gpu=True,
+        seed=1234,
+    )
     nnet.summary()
-    nnet.train(X, T, n_epochs=50, batch_size=32, learning_rate=0.0001,
-               opt='adam', verbose=True, shuffle=True)
+    nnet.train(
+        X,
+        T,
+        n_epochs=50,
+        batch_size=32,
+        learning_rate=0.0001,
+        opt="adam",
+        verbose=True,
+        shuffle=True,
+    )
 
     Y = nnet.use(X)
-    print(f'Accuracy: {accuracy(Y, T):.3f}')
+    print(f"Accuracy: {accuracy(Y, T):.3f}")
     plt.figure(2)
     plt.plot(np.exp(-np.array(nnet.train_error_trace)))
 

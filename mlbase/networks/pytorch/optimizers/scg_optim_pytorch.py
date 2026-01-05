@@ -1,7 +1,8 @@
-import numpy as np
 import math
-import torch
 import sys
+
+import numpy as np
+import torch
 from torch.optim import Optimizer
 
 # def logging(s):
@@ -38,19 +39,20 @@ class SCG(Optimizer):
             lamb_min=1e-15,
             lamb_max=1e20,
             minibatch=minibatch,
-            momentum=momentum)
+            momentum=momentum,
+        )
 
         super().__init__(parameters, defaults)
 
     def _set_weights(self, w):
-        torch.nn.utils.vector_to_parameters(w, self.param_groups[0]['params'])
+        torch.nn.utils.vector_to_parameters(w, self.param_groups[0]["params"])
 
     def _get_weights(self):
-        return torch.nn.utils.parameters_to_vector(self.param_groups[0]['params'])
+        return torch.nn.utils.parameters_to_vector(self.param_groups[0]["params"])
 
     def _gradients_to_vector(self):
         grads = []
-        for param in self.param_groups[0]['params']:
+        for param in self.param_groups[0]["params"]:
             grads.append(param.grad.view(-1))
         # return negative gradient
         return -torch.cat(grads)
@@ -119,12 +121,12 @@ class SCG(Optimizer):
         # torch.cuda.empty_cache()
         self.loss_closure = torch.enable_grad()(closure)
 
-        sigma0 = self.defaults['sigma0']
-        lamb_min = self.defaults['lamb_min']
-        lamb_max = self.defaults['lamb_max']
-        minibatch = self.defaults['minibatch']
+        sigma0 = self.defaults["sigma0"]
+        lamb_min = self.defaults["lamb_min"]
+        lamb_max = self.defaults["lamb_max"]
+        minibatch = self.defaults["minibatch"]
 
-        momentum = self.defaults['momentum']
+        momentum = self.defaults["momentum"]
 
         # 1) init
         momentum = 0.9
@@ -136,32 +138,32 @@ class SCG(Optimizer):
             p = gw  # conjugate direction
             p2 = p @ p  # .T
             self.state = {
-                'lamb': 1e-6,
-                'lamb_h': 0,
-                'success': True,
-                'n_successes': 0,
-                'n_vars': len(self._get_weights()),
-                'gw': gw,
-                'fw': fw,
-                'p': p,
-                'p2': p2,
-                'losses': [],
-                'delta': 0,
+                "lamb": 1e-6,
+                "lamb_h": 0,
+                "success": True,
+                "n_successes": 0,
+                "n_vars": len(self._get_weights()),
+                "gw": gw,
+                "fw": fw,
+                "p": p,
+                "p2": p2,
+                "losses": [],
+                "delta": 0,
             }
             first = True
             print(self._get_weights(), gw, fw, p, p2)
 
-        lamb = self.state['lamb']
-        lamb_h = self.state['lamb_h']
-        success = self.state['success']
-        n_successes = self.state['n_successes']
-        n_vars = self.state['n_vars']
-        gw = self.state['gw']
-        fw = self.state['fw']
-        p = self.state['p']
-        p2 = self.state['p2']
-        losses = self.state['losses']
-        delta = self.state['delta']
+        lamb = self.state["lamb"]
+        lamb_h = self.state["lamb_h"]
+        success = self.state["success"]
+        n_successes = self.state["n_successes"]
+        n_vars = self.state["n_vars"]
+        gw = self.state["gw"]
+        fw = self.state["fw"]
+        p = self.state["p"]
+        p2 = self.state["p2"]
+        losses = self.state["losses"]
+        delta = self.state["delta"]
 
         if not first and momentum:
             gw_t, fw_t = self._gradient()
@@ -189,11 +191,11 @@ class SCG(Optimizer):
         # 4) make Hessian positive definite
         if delta <= 0:
             lamb_h = 2 * (lamb - delta / p2)
-            delta = - delta + lamb * p2
+            delta = -delta + lamb * p2
             lamb = lamb_h
 
         if delta == 0:
-            print('===========================delta == 0  take care of this case')
+            print("===========================delta == 0  take care of this case")
 
         # 5) calculate step size
         mu = p @ gw  # .T
@@ -240,26 +242,26 @@ class SCG(Optimizer):
 
         self.state.update(
             {
-                'lamb':  lamb,
-                'lamb_h': lamb_h,
-                'success': success,
-                'n_successes': n_successes,
-                'gw': gw,
-                'fw': fw,
-                'p': p,
-                'p2': p2,
-                'losses': losses,
-                'delta': delta
+                "lamb": lamb,
+                "lamb_h": lamb_h,
+                "success": success,
+                "n_successes": n_successes,
+                "gw": gw,
+                "fw": fw,
+                "p": p,
+                "p2": p2,
+                "losses": losses,
+                "delta": delta,
             }
         )
 
         return fw
 
 
-if __name__ == '__main__':
-    from matplotlib.animation import FuncAnimation
+if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    from torch.optim import Adam, SGD
+    from matplotlib.animation import FuncAnimation
+    from torch.optim import SGD, Adam
     from tqdm import tqdm
 
     test_rosenbrock = True
@@ -271,7 +273,7 @@ if __name__ == '__main__':
         # https://github.com/jankrepl/mildlyoverfitted
         def rosenbrock(xy):
             x, y = xy
-            return (1 - x) ** 2 + 100 * (y - x ** 2) ** 2
+            return (1 - x) ** 2 + 100 * (y - x**2) ** 2
 
         def run_optimization(xy_init, optimizer_class, n_iter, **optimizer_kwargs):
             xy_t = torch.tensor(xy_init, requires_grad=True)
@@ -282,7 +284,7 @@ if __name__ == '__main__':
             path[0, :] = xy_init
 
             def closure(grad=True, loss=None):
-                '''Only for SCG'''
+                """Only for SCG"""
                 if not loss:
                     loss = rosenbrock(xy_t)
                 if not grad:
@@ -308,13 +310,15 @@ if __name__ == '__main__':
 
             return path
 
-        def create_animation(paths,
-                             colors,
-                             names,
-                             figsize=(12, 12),
-                             x_lim=(-2, 2),
-                             y_lim=(-1, 3),
-                             n_seconds=5):
+        def create_animation(
+            paths,
+            colors,
+            names,
+            figsize=(12, 12),
+            x_lim=(-2, 2),
+            y_lim=(-1, 3),
+            n_seconds=5,
+        ):
             if not (len(paths) == len(colors) == len(names)):
                 raise ValueError
 
@@ -331,9 +335,10 @@ if __name__ == '__main__':
             fig, ax = plt.subplots(figsize=figsize)
             ax.contour(X, Y, Z, 90, cmap="jet")
 
-            lines = [ax.plot([], [], '.-',
-                             label=label,
-                             c=c) for c, label in zip(colors, names)]
+            lines = [
+                ax.plot([], [], ".-", label=label, c=c)
+                for c, label in zip(colors, names)
+            ]
 
             ax.legend(prop={"size": 25})
             ax.plot(*minimum, "rD")
@@ -341,19 +346,20 @@ if __name__ == '__main__':
             def animate(i):
                 for path, line in zip(paths, lines):
                     # set_offsets(path[:i, :])
-                    line[0].set_xdata(path[:i+1, 0])
+                    line[0].set_xdata(path[: i + 1, 0])
                     # set_offsets(path[:i, :])
-                    line[0].set_ydata(path[:i+1, 1])
+                    line[0].set_ydata(path[: i + 1, 1])
 
                 ax.set_title(str(i))
 
             ms_per_frame = 1000 * n_seconds / path_length
 
             anim = FuncAnimation(
-                fig, animate, frames=path_length, interval=ms_per_frame)
+                fig, animate, frames=path_length, interval=ms_per_frame
+            )
             return anim
 
-        xy_init = (.3, .8)
+        xy_init = (0.3, 0.8)
         n_iter = 200
 
         # path_adam = run_optimization(xy_init, Adam, n_iter, lr=0.01)
@@ -388,19 +394,19 @@ if __name__ == '__main__':
 
     ######################################################################
     if test_mnist:
-        print('='*70)
-        print('MNIST')
-        print('='*70)
+        print("=" * 70)
+        print("MNIST")
+        print("=" * 70)
 
-        import pickle
         import gzip
+        import pickle
 
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # device = torch.device('cpu')
-        print('Using device', device)
+        print("Using device", device)
 
-        with gzip.open('mnist.pkl.gz', 'rb') as f:
-            train_set, valid_set, test_set = pickle.load(f, encoding='latin1')
+        with gzip.open("mnist.pkl.gz", "rb") as f:
+            train_set, valid_set, test_set = pickle.load(f, encoding="latin1")
 
         n = train_set[0].shape[0]  # 1000
         n = 50000
@@ -424,8 +430,15 @@ if __name__ == '__main__':
         Xtest = to_torch_float(Xtest)
         Ttest = to_torch_int(Ttest)
 
-        print("Train with", Xtrain.shape[0], "images. Validate with",
-              Xval.shape[0], "Test with", Xtest.shape[0], "images.")
+        print(
+            "Train with",
+            Xtrain.shape[0],
+            "images. Validate with",
+            Xval.shape[0],
+            "Test with",
+            Xtest.shape[0],
+            "images.",
+        )
 
         class NNet(torch.nn.Module):
 
@@ -450,7 +463,7 @@ if __name__ == '__main__':
                 return X
 
             def __repr__(self):
-                return f'NNet({self.n_inputs}, {self.hiddens}, {self.n_outputs})'
+                return f"NNet({self.n_inputs}, {self.hiddens}, {self.n_outputs})"
 
         def get_batch(X, T, batch_size=100):
             if batch_size == -1:
@@ -505,7 +518,7 @@ if __name__ == '__main__':
             loss_func = torch.nn.CrossEntropyLoss()
             best_val_error = -np.inf
 
-            batch_size = batchsize   # -1 for no minibatches
+            batch_size = batchsize  # -1 for no minibatches
             if batch_size == -1 or batch_size == Xtrain.shape[0]:
                 optimizer = SCG(nnet.parameters(), minibatch=False)
             else:
@@ -513,8 +526,7 @@ if __name__ == '__main__':
 
             for epoch in range(n_epochs):
 
-                for i, (Xb, Tb) in enumerate(
-                        get_batch(Xtrain, Ttrain, batch_size)):
+                for i, (Xb, Tb) in enumerate(get_batch(Xtrain, Ttrain, batch_size)):
 
                     # Xb = Xb  # .to(device)
                     # Tb = Tb  # .to(device)
@@ -537,8 +549,9 @@ if __name__ == '__main__':
                         val = percent_correct(nnet(Xval), Tval).cpu()
                         if val > best_val_error:
                             # save weights
-                            nnet.best_parameters = [p.clone()
-                                                    for p in nnet.parameters()]
+                            nnet.best_parameters = [
+                                p.clone() for p in nnet.parameters()
+                            ]
                             nnet.best_epoch = epoch + 1
                             best_val_error = val
 
@@ -547,18 +560,21 @@ if __name__ == '__main__':
                 #                     likelihood(Tval, nnet(Xval)).detach().cpu(),
                 #                     likelihood(Ttest, nnet(Xtest)).detach().cpu()])
 
-                error_trace.append([
-                    percent_correct(nnet(Xval), Tval).detach().cpu(),
-                    percent_correct(nnet(Xtest), Ttest).detach().cpu()])
+                error_trace.append(
+                    [
+                        percent_correct(nnet(Xval), Tval).detach().cpu(),
+                        percent_correct(nnet(Xtest), Ttest).detach().cpu(),
+                    ]
+                )
 
             error_trace = np.array(error_trace)
             print(error_trace[-10:, :])
 
             return error_trace
 
-        print('Training with full batch, no minibatches')
+        print("Training with full batch, no minibatches")
         error_trace_nobatches = run_mnist(batchsize=-1)
-        print('Training with minibatches of size 1000')
+        print("Training with minibatches of size 1000")
         error_trace_batches = run_mnist(batchsize=1000)
 
         plt.ion()  # for running in ipython
@@ -567,8 +583,8 @@ if __name__ == '__main__':
         plt.clf()
         plt.plot(error_trace_batches)
         plt.plot(error_trace_nobatches)
-        plt.legend(('ValB', 'TestB', 'Val', 'Test'))
-        plt.xlabel('Epochs')
-        plt.ylabel('Precent Correct')
+        plt.legend(("ValB", "TestB", "Val", "Test"))
+        plt.xlabel("Epochs")
+        plt.ylabel("Precent Correct")
         # plt.legend(('TrainB', 'ValB', 'TestB', 'Train', 'Val', 'Test'))
         plt.show()

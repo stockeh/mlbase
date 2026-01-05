@@ -4,11 +4,11 @@
 
 import copy
 import sys
+from typing import List
+
 import mlx.core as mx
 import mlx.nn as nn
-
 from mlx.utils import tree_flatten
-from typing import List
 
 
 def parameters_to_vector(parameters: dict):
@@ -22,21 +22,19 @@ def vector_to_parameters(vec: mx.array, parameters: dict):
     i = 0
     for _, val in tree_flatten(parameters):
         n_param = val.size
-        val[:] = vec[i:i+n_param].reshape(val.shape)
+        val[:] = vec[i : i + n_param].reshape(val.shape)
         i += n_param
     return parameters
 
 
-class SCG():
-    def __init__(
-        self, loss_fn, grad_fn
-    ):
+class SCG:
+    def __init__(self, loss_fn, grad_fn):
         super().__init__()
         self._loss_fn = loss_fn
         self._grad_fn = grad_fn
 
         self._initialized = False
-        self._state = {'step': mx.array(0, mx.uint64)}
+        self._state = {"step": mx.array(0, mx.uint64)}
 
         self.defaults = dict(
             sigma0=1e-6,
@@ -50,28 +48,30 @@ class SCG():
 
     @property
     def step(self):
-        return self.state['step']
+        return self.state["step"]
 
     def init(self, parameters: dict, fargs: List = []):
-        self.state['w'] = parameters_to_vector(parameters)
+        self.state["w"] = parameters_to_vector(parameters)
 
-        gw = -self._grad_fn(self.state['w'], *fargs)
-        fw = self._loss_fn(self.state['w'], *fargs)
+        gw = -self._grad_fn(self.state["w"], *fargs)
+        fw = self._loss_fn(self.state["w"], *fargs)
         p = gw  # conjugate direction
         p2 = p.T @ p
-        self.state.update({
-            'lamb': 1e-6,
-            'lamb_h': 0,
-            'success': True,
-            'n_successes': 0,
-            'n_vars': len(self.state['w']),
-            'gw': gw,
-            'fw': fw,
-            'p': p,
-            'p2': p2,
-            'delta': 0,
-            'reason': 'not yet converged',
-        })
+        self.state.update(
+            {
+                "lamb": 1e-6,
+                "lamb_h": 0,
+                "success": True,
+                "n_successes": 0,
+                "n_vars": len(self.state["w"]),
+                "gw": gw,
+                "fw": fw,
+                "p": p,
+                "p2": p2,
+                "delta": 0,
+                "reason": "not yet converged",
+            }
+        )
         self._initialized = True
         self.i = 0
 
@@ -80,29 +80,30 @@ class SCG():
             self.init(model.trainable_parameters(), fargs)
 
         self.compute(fargs)
-        self.state['step'] = self.step + 1
-        model.update(vector_to_parameters(
-            self.state['w'], model.trainable_parameters()))
+        self.state["step"] = self.step + 1
+        model.update(
+            vector_to_parameters(self.state["w"], model.trainable_parameters())
+        )
 
     def compute(self, fargs: List = []):
 
-        sigma0 = self.defaults['sigma0']
-        lamb_min = self.defaults['lamb_min']
-        lamb_max = self.defaults['lamb_max']
+        sigma0 = self.defaults["sigma0"]
+        lamb_min = self.defaults["lamb_min"]
+        lamb_max = self.defaults["lamb_max"]
 
         # 1) init
-        lamb = self.state['lamb']
-        lamb_h = self.state['lamb_h']
-        success = self.state['success']
-        n_successes = self.state['n_successes']
-        n_vars = self.state['n_vars']
-        gw = self.state['gw']
-        fw = self.state['fw']
-        p = self.state['p']
-        p2 = self.state['p2']
-        delta = self.state['delta']
+        lamb = self.state["lamb"]
+        lamb_h = self.state["lamb_h"]
+        success = self.state["success"]
+        n_successes = self.state["n_successes"]
+        n_vars = self.state["n_vars"]
+        gw = self.state["gw"]
+        fw = self.state["fw"]
+        p = self.state["p"]
+        p2 = self.state["p2"]
+        delta = self.state["delta"]
 
-        w = self.state['w']
+        w = self.state["w"]
 
         # 2) calculate second order info
         if success:
@@ -113,7 +114,7 @@ class SCG():
             delta = p.T @ (gw - g_small_step) / sigma
 
             if p2 < sys.float_info.epsilon:
-                self.state['reason'] = 'limit on machine precision'
+                self.state["reason"] = "limit on machine precision"
                 return True
 
         # 3) scale delta
@@ -122,7 +123,7 @@ class SCG():
         # 4) make Hessian positive definite
         if delta <= 0:
             lamb_h = 2 * (lamb - delta / p2)
-            delta = - delta + lamb * p2
+            delta = -delta + lamb * p2
             lamb = lamb_h
 
         # 5) calculate step size
@@ -144,7 +145,7 @@ class SCG():
             w[:] = walpha
             gw[:] = -self._grad_fn(walpha, *fargs)
             if mx.isnan(gw).any() or mx.all(gw == 0):
-                self.state['reason'] = 'zero gradient'
+                self.state["reason"] = "zero gradient"
                 return True
 
             # restart algorithm every len(w) iterations
@@ -169,52 +170,53 @@ class SCG():
 
         self.state.update(
             {
-                'w': w,
-                'lamb':  lamb,
-                'lamb_h': lamb_h,
-                'success': success,
-                'n_successes': n_successes,
-                'gw': gw,
-                'fw': fw,
-                'p': p,
-                'p2': p2,
-                'delta': delta
+                "w": w,
+                "lamb": lamb,
+                "lamb_h": lamb_h,
+                "success": success,
+                "n_successes": n_successes,
+                "gw": gw,
+                "fw": fw,
+                "p": p,
+                "p2": p2,
+                "delta": delta,
             }
         )
         return False
 
 
 def simple():
-    print('----SIMPLE----')
+    print("----SIMPLE----")
 
     def loss_fn(w):
-        return (w - 1.5)**2
+        return (w - 1.5) ** 2
 
     def grad_fn(w):
         return 2 * (w - 1.5)
 
-    parameters = {'linear': mx.array([-5.5])}
+    parameters = {"linear": mx.array([-5.5])}
 
     scg = SCG(loss_fn, grad_fn)
     scg.init(parameters, fargs=[])
 
     for i in range(1000):
-        scg.state['step'] = scg.step + 1
+        scg.state["step"] = scg.step + 1
         done = scg.compute(fargs=[])
         if done:
             break
-    print(scg.state['w'], scg.state['reason'], scg.step)
+    print(scg.state["w"], scg.state["reason"], scg.step)
 
 
 def rosenbrock():
     import matplotlib.pyplot as plt
-    from mlx.optimizers import Adam, SGD
+    from mlx.optimizers import SGD, Adam
     from tqdm import tqdm
-    print('----ROSENBROCK----')
+
+    print("----ROSENBROCK----")
 
     def rosenbrock(xy):
         x, y = xy
-        return (1 - x) ** 2 + 100 * (y - x ** 2) ** 2
+        return (1 - x) ** 2 + 100 * (y - x**2) ** 2
 
     def grad_fn(xy):
         return mx.grad(rosenbrock)(xy)
@@ -223,19 +225,19 @@ def rosenbrock():
         xy_t = mx.array(xy_init, dtype=mx.float32)
         optimizer = optimizer_class(**optimizer_kwargs)
         if isinstance(optimizer, SCG):
-            optimizer.init({'o': xy_t})
+            optimizer.init({"o": xy_t})
 
         path = [xy_t]
 
         for _ in tqdm(range(n_iter)):
             if isinstance(optimizer, SCG):
-                optimizer.state['step'] = optimizer.step + 1
+                optimizer.state["step"] = optimizer.step + 1
                 optimizer.compute()
-                xy_t = copy.deepcopy(optimizer.state['w'])
+                xy_t = copy.deepcopy(optimizer.state["w"])
             else:
                 loss = rosenbrock(xy_t)
                 grad = grad_fn(xy_t)
-                xy_t = optimizer.apply_gradients({'o': grad}, {'o': xy_t})['o']
+                xy_t = optimizer.apply_gradients({"o": grad}, {"o": xy_t})["o"]
             path.append(xy_t)
 
         return mx.array(path)
@@ -253,18 +255,16 @@ def rosenbrock():
         fig = plt.figure(figsize=(8, 5))
 
         ax = fig.add_subplot(1, 1, 1)
-        ax.contour(X, Y, Z, levels=40, cmap='inferno')
-        ax.contourf(X, Y, Z, levels=40, cmap='binary', alpha=0.7)
+        ax.contour(X, Y, Z, levels=40, cmap="inferno")
+        ax.contourf(X, Y, Z, levels=40, cmap="binary", alpha=0.7)
 
         for path, name, color in zip(paths, names, colors):
             iter_x, iter_y = path[:, 0], path[:, 1]
-            ax.plot(iter_x, iter_y, marker='x', ms=3,
-                    lw=2, label=name, color=color)
+            ax.plot(iter_x, iter_y, marker="x", ms=3, lw=2, label=name, color=color)
         ax.legend(fontsize=12)
-        ax.axis('off')
-        ax.plot(*minimum, 'kD')
-        ax.set_title(
-            'Rosenbrok Function: $f(x, y) = (1 - x)^2 + 100(y - x^2)^2$')
+        ax.axis("off")
+        ax.plot(*minimum, "kD")
+        ax.set_title("Rosenbrok Function: $f(x, y) = (1 - x)^2 + 100(y - x^2)^2$")
 
         fig.tight_layout()
         # fig.savefig(f'media/rosenbrock.png', dpi=300, bbox_inches='tight')
@@ -275,52 +275,54 @@ def rosenbrock():
 
     path_adam = run_optimization(xy_init, Adam, n_iter, learning_rate=0.05)
     path_sgd = run_optimization(xy_init, SGD, n_iter, learning_rate=0.001)
-    path_scg = run_optimization(xy_init, SCG, n_iter,
-                                loss_fn=rosenbrock, grad_fn=grad_fn)
+    path_scg = run_optimization(
+        xy_init, SCG, n_iter, loss_fn=rosenbrock, grad_fn=grad_fn
+    )
 
     freq = 1
 
     paths = [path_adam[::freq], path_sgd[::freq], path_scg[::freq]]
-    names = ['Adam', 'SGD', 'SCG']
-    colors = ['royalblue', 'seagreen', 'red']
-    print('saving results to rosenbrock.png')
+    names = ["Adam", "SGD", "SCG"]
+    colors = ["royalblue", "seagreen", "red"]
+    print("saving results to rosenbrock.png")
     plot_rosenbrok(paths, names, colors)
 
-    print('[SCG]\n', path_scg[-3:])
-    print('[SGD]\n', path_sgd[-3:])
-    print('[Adam]\n', path_adam[-3:])
+    print("[SCG]\n", path_scg[-3:])
+    print("[SGD]\n", path_sgd[-3:])
+    print("[Adam]\n", path_adam[-3:])
 
 
 def mnist():
-    print('----MNIST----')
-    import mlx.nn as nn
+    print("----MNIST----")
     import matplotlib.pyplot as plt
-
+    import mlx.nn as nn
+    from dataset import mnist
     from mlx.optimizers import Adam, Lion
-    from tqdm import tqdm
+
     # custom modules
     from models import Network
-    from dataset import mnist
+    from tqdm import tqdm
 
     mx.random.seed(37)
 
     train_data, test_data = mnist(-1)
 
     full_batch_train = next(train_data)
-    Xtrain = mx.array(full_batch_train['image'])
-    Ttrain = mx.array(full_batch_train['label'])
+    Xtrain = mx.array(full_batch_train["image"])
+    Ttrain = mx.array(full_batch_train["label"])
 
     full_batch_test = next(test_data)
-    Xtest = mx.array(full_batch_test['image'])
-    Ttest = mx.array(full_batch_test['label'])
+    Xtest = mx.array(full_batch_test["image"])
+    Ttest = mx.array(full_batch_test["label"])
 
-    kwargs = {'n_inputs': Xtrain.shape[1:],
-              #   'conv_layers_list': [{'filters': 4, 'kernel_size': 3},
-              #                        {'filters': 8, 'kernel_size': 3}],
-              'n_hiddens_list': [0],
-              'n_outputs': 10,
-              'activation_f': 'tanh'
-              }
+    kwargs = {
+        "n_inputs": Xtrain.shape[1:],
+        #   'conv_layers_list': [{'filters': 4, 'kernel_size': 3},
+        #                        {'filters': 8, 'kernel_size': 3}],
+        "n_hiddens_list": [0],
+        "n_outputs": 10,
+        "activation_f": "tanh",
+    }
 
     def accuracy(Y, T):
         return mx.mean(mx.argmax(Y, axis=1) == T)
@@ -334,7 +336,7 @@ def mnist():
         for _ in tqdm(range(EPOCHS)):
             if isinstance(optimizer, SCG):
                 optimizer.update(model, fargs=[Xtrain, Ttrain])
-                losses.append(optimizer.state['fw'].item())
+                losses.append(optimizer.state["fw"].item())
             else:
                 loss, grads = loss_and_grad_fn(Xtrain, Ttrain)
                 losses.append(loss.item())
@@ -343,15 +345,15 @@ def mnist():
 
         train_accuracy = (accuracy(model(Xtrain), Ttrain) * 100).item()
         test_accuracy = (accuracy(model(Xtest), Ttest) * 100).item()
-        print(f'train: {train_accuracy:.2f}%')
-        print(f'test: {test_accuracy:.2f}%')
+        print(f"train: {train_accuracy:.2f}%")
+        print(f"test: {test_accuracy:.2f}%")
 
         return losses, test_accuracy
 
     def loss_fn(X, T):
-        return nn.losses.cross_entropy(model(X), T, reduction='mean')
+        return nn.losses.cross_entropy(model(X), T, reduction="mean")
 
-    print('[SCG] training...')
+    print("[SCG] training...")
     model = Network(**kwargs)
     model.summary()
     loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
@@ -379,37 +381,37 @@ def mnist():
     # sgd = SGD(learning_rate=0.05, momentum=0.9, nesterov=False)
     # sgd_loss, sgd_acc = train_and_evaluate(sgd, model)
 
-    print('[Lion] training...')
+    print("[Lion] training...")
     model = Network(**kwargs)
     loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
     lion = Lion(learning_rate=0.001)
     lion_loss, lion_acc = train_and_evaluate(lion, model)
 
-    print('[Adam] training...')
+    print("[Adam] training...")
     model = Network(**kwargs)
     loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
     adam = Adam(learning_rate=0.001)
     adam_loss, adam_acc = train_and_evaluate(adam, model)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 5))
-    for d, a, c, l in zip([adam_loss, lion_loss, scg_loss],
-                          [adam_acc, lion_acc, scg_acc],
-                          ['royalblue', 'seagreen', 'red'],
-                          ['Adam', 'Lion', 'SCG']):
-        ax.plot(mx.exp(-mx.array(d)), color=c, lw=2, label=f'{l} ({a:.2f}%)')
-    ax.set_xlabel('Epochs', fontsize=12)
-    ax.set_ylabel('Likelihood', fontsize=12)
-    ax.set_title(
-        f'[MNIST] Full Batch -- {kwargs['n_hiddens_list']}',
-        fontsize=12)
+    for d, a, c, l in zip(
+        [adam_loss, lion_loss, scg_loss],
+        [adam_acc, lion_acc, scg_acc],
+        ["royalblue", "seagreen", "red"],
+        ["Adam", "Lion", "SCG"],
+    ):
+        ax.plot(mx.exp(-mx.array(d)), color=c, lw=2, label=f"{l} ({a:.2f}%)")
+    ax.set_xlabel("Epochs", fontsize=12)
+    ax.set_ylabel("Likelihood", fontsize=12)
+    ax.set_title(f"[MNIST] Full Batch -- {kwargs['n_hiddens_list']}", fontsize=12)
     ax.legend(fontsize=12)
-    ax.tick_params(axis='both', which='major', labelsize=10)
-    fig.savefig(f'media/mnist.png', dpi=300, bbox_inches='tight')
+    ax.tick_params(axis="both", which="major", labelsize=10)
+    fig.savefig(f"media/mnist.png", dpi=300, bbox_inches="tight")
 
     plt.show(block=True)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     simple()
     rosenbrock()
     mnist()

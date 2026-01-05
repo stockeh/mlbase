@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch.nn import functional as F
 
 from mlbase.networks.pytorch.neuralnetworks import NeuralNetwork
 
@@ -46,11 +47,13 @@ class DiceLoss(torch.nn.Module):
         super(DiceLoss, self).__init__()
         self.eps: float = 1e-6
 
-    def _onehot(self, labels: torch.Tensor, num_classes: int,
-                device=None, dtype=None) -> torch.Tensor:
+    def _onehot(
+        self, labels: torch.Tensor, num_classes: int, device=None, dtype=None
+    ) -> torch.Tensor:
         shape = labels.shape
-        one_hot = torch.zeros((shape[0], num_classes) +
-                              shape[1:], device=device, dtype=dtype)
+        one_hot = torch.zeros(
+            (shape[0], num_classes) + shape[1:], device=device, dtype=dtype
+        )
         return one_hot.scatter_(1, labels.unsqueeze(1), 1.0)
 
     def forward(self, Y: torch.Tensor, T: torch.Tensor) -> torch.Tensor:
@@ -59,29 +62,29 @@ class DiceLoss(torch.nn.Module):
         Ysoft = F.softmax(Y, dim=1)
 
         # create the labels one hot tensor
-        T1 = self._onehot(
-            T, num_classes=Y.shape[1], device=Y.device, dtype=Y.dtype)
+        T1 = self._onehot(T, num_classes=Y.shape[1], device=Y.device, dtype=Y.dtype)
 
         # compute the actual dice score
         dims = (1, 2, 3)
         intersection = torch.sum(Ysoft * T1, dims)
         cardinality = torch.sum(Ysoft + T1, dims)
 
-        dice_score = 2. * intersection / (cardinality + self.eps)
-        return torch.mean(1. - dice_score)
+        dice_score = 2.0 * intersection / (cardinality + self.eps)
+        return torch.mean(1.0 - dice_score)
 
 
 class ConvolutionalAutoEncoder(NeuralNetwork):
 
     class Network(torch.nn.Module):
-        def __init__(self, n_inputs, n_hiddens_list, n_outputs, conv_layers, activation_f):
+        def __init__(
+            self, n_inputs, n_hiddens_list, n_outputs, conv_layers, activation_f
+        ):
             super().__init__()
             if not isinstance(n_hiddens_list, list):
-                raise Exception(
-                    'Network: n_hiddens_list must be a list.')
+                raise Exception("Network: n_hiddens_list must be a list.")
 
-            assert conv_layers is not None, 'Must include Conv Layers.'
-            assert n_inputs == n_outputs, 'n inputs must equal n outputs.'
+            assert conv_layers is not None, "Must include Conv Layers."
+            assert n_inputs == n_outputs, "n inputs must equal n outputs."
 
             if len(n_hiddens_list) == 0 or n_hiddens_list[0] == 0:
                 self.n_hidden_layers = 0
@@ -104,68 +107,98 @@ class ConvolutionalAutoEncoder(NeuralNetwork):
             ]
             names = [str(o.__name__).lower() for o in activations]
             try:
-                activation = activations[names.index(
-                    str(activation_f).lower())]
+                activation = activations[names.index(str(activation_f).lower())]
             except:
                 raise NotImplementedError(
-                    f'__init__: {activation_f=} is not yet implemented.')
+                    f"__init__: {activation_f=} is not yet implemented."
+                )
             l = 0
             ni = np.asarray(n_inputs)
             # add convolutional layers
             # TODO: currently only works with padding='same' and stride=1
             for conv_layer in self.conv_layers:
                 n_channels = ni[0]  # C, H, W
-                self.model.add_module(f'conv_{l}', torch.nn.Conv2d(
-                    n_channels, conv_layer['n_units'], conv_layer['shape'],
-                    stride=1, padding='same', padding_mode='zeros'))
-                self.model.add_module(f'activation_{l}', activation())
                 self.model.add_module(
-                    f'maxpool_{l}', torch.nn.MaxPool2d(2, stride=2))
+                    f"conv_{l}",
+                    torch.nn.Conv2d(
+                        n_channels,
+                        conv_layer["n_units"],
+                        conv_layer["shape"],
+                        stride=1,
+                        padding="same",
+                        padding_mode="zeros",
+                    ),
+                )
+                self.model.add_module(f"activation_{l}", activation())
+                self.model.add_module(f"maxpool_{l}", torch.nn.MaxPool2d(2, stride=2))
                 # TODO: currently only to divide H, W dimensions by 2
                 # with 'same' padding
-                ni = np.concatenate([[conv_layer['n_units']], ni[1:] // 2])
+                ni = np.concatenate([[conv_layer["n_units"]], ni[1:] // 2])
                 l += 1
 
             conv_shape = ni
-            self.model.add_module('flatten', torch.nn.Flatten())  # okay
+            self.model.add_module("flatten", torch.nn.Flatten())  # okay
             ni = np.prod(ni)
 
             # fully-connected latent layers
             # TODO: only Tanh activations are supported
             if self.n_hidden_layers > 0:
                 for _, n_units in enumerate(n_hiddens_list):
-                    self.model.add_module(
-                        f'linear_{l}', torch.nn.Linear(ni, n_units))
-                    self.model.add_module(f'activation_{l}', torch.nn.Tanh())
+                    self.model.add_module(f"linear_{l}", torch.nn.Linear(ni, n_units))
+                    self.model.add_module(f"activation_{l}", torch.nn.Tanh())
                     ni = n_units
                     l += 1
             self.model.add_module(
-                f'linear_{l}', torch.nn.Linear(ni, np.prod(conv_shape)))
-            self.model.add_module(f'activation_{l}', torch.nn.Tanh())
+                f"linear_{l}", torch.nn.Linear(ni, np.prod(conv_shape))
+            )
+            self.model.add_module(f"activation_{l}", torch.nn.Tanh())
             l += 1
 
             # decoder
             self.model.add_module(
-                f'unflatten', torch.nn.Unflatten(1, unflattened_size=tuple(
-                    [int(i) for i in conv_shape])))  # hack to force tuple of ints
+                f"unflatten",
+                torch.nn.Unflatten(
+                    1, unflattened_size=tuple([int(i) for i in conv_shape])
+                ),
+            )  # hack to force tuple of ints
             ni = conv_shape
             for conv_layer in reversed(self.conv_layers):
                 n_channels = ni[0]  # C, H, W
-                self.model.add_module(f'conv_{l}', torch.nn.Conv2d(
-                    n_channels, conv_layer['n_units'], conv_layer['shape'],
-                    stride=1, padding='same', padding_mode='zeros'))
-                self.model.add_module(f'activation_{l}', activation())
                 self.model.add_module(
-                    f'upsample_{l}', torch.nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True))
+                    f"conv_{l}",
+                    torch.nn.Conv2d(
+                        n_channels,
+                        conv_layer["n_units"],
+                        conv_layer["shape"],
+                        stride=1,
+                        padding="same",
+                        padding_mode="zeros",
+                    ),
+                )
+                self.model.add_module(f"activation_{l}", activation())
+                self.model.add_module(
+                    f"upsample_{l}",
+                    torch.nn.Upsample(
+                        scale_factor=2, mode="bilinear", align_corners=True
+                    ),
+                )
                 # TODO: currently only to divide H, W dimensions by 2
                 # with 'same' padding
-                ni = np.concatenate([[conv_layer['n_units']], ni[1:] * 2])
+                ni = np.concatenate([[conv_layer["n_units"]], ni[1:] * 2])
                 l += 1
 
             # Linear Convolutional output layer
-            self.model.add_module(f'output_{l}', torch.nn.Conv2d(
-                ni[0], n_outputs[0], self.conv_layers[0]['shape'],
-                stride=1, padding='same', padding_mode='zeros'))
+            self.model.add_module(
+                f"output_{l}",
+                torch.nn.Conv2d(
+                    ni[0],
+                    n_outputs[0],
+                    self.conv_layers[0]["shape"],
+                    stride=1,
+                    padding="same",
+                    padding_mode="zeros",
+                ),
+            )
 
             # self.model.apply(self._init_weights)
 

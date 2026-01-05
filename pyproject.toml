@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mlbase"
+version = "0.1.0"
+description = "Base machine learning utilities for research."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Jason Stock" }]
+dependencies = [
+    "numpy",
+    "torch",
+    "tensorflow",
+    "mlx",
+    "matplotlib",
+    "ray",
+    "scikit-learn",
+    "torch_optimizer",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["mlbase"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[dependency-groups]
+dev = ["ty", "ruff"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
